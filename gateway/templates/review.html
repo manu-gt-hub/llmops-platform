@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_pill, score, pct %}
+{% block title %}Review · Agent console{% endblock %}
+{% block content %}
+<h1>Review queue</h1>
+<p class="muted">Judged runs that scored below {{ PASS_SCORE }} or tripped a guardrail, not labeled yet.
+Your labels measure how often the judge agrees with a human: a judge is only worth trusting once
+that number is high.</p>
+
+<div class="card grid">
+  <div><div class="muted small">Runs labeled</div><div class="stat">{{ stats.labeled }}</div></div>
+  <div><div class="muted small">Judge / human agreement</div><div class="stat">{{ pct(stats.agreement) }}</div></div>
+  <div><div class="muted small">Waiting for review</div><div class="stat">{{ queue | length }}</div></div>
+</div>
+
+<div class="table-wrap"><table>
+  <tr><th>Run</th><th>Agent</th><th>Question</th><th>Status</th><th>Judge</th><th>Guardrails</th><th>Label</th></tr>
+  {% for r in queue %}
+  <tr>
+    <td><a href="/console/runs/{{ r.run_id }}">{{ r.run_id }}</a>{% if r.synthetic %} <span class="pill muted">demo</span>{% endif %}
+      <div class="small muted">{{ r.started_at.strftime("%m-%d %H:%M") }}</div></td>
+    <td>{{ r.agent }}</td>
+    <td class="small">{{ (r.question or "")[:120] }}<div class="muted">{{ (r.reasoning or "")[:160] }}</div></td>
+    <td>{{ status_pill(r.status) }}</td>
+    <td>{{ score(r.score) }}</td>
+    <td>{{ r.guardrail_hits }}</td>
+    <td><form method="post" action="/console/runs/{{ r.run_id }}/label" style="white-space:nowrap">
+      <button name="value" value="good" title="Good">👍</button>
+      <button name="value" value="bad" title="Bad">👎</button></form></td>
+  </tr>
+  {% else %}<tr><td colspan="7" class="muted">Nothing to review.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

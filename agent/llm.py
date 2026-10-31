@@ -28,7 +28,8 @@ _FALLBACK_MODELS = {"claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "cla
 
 
 class GatewayRejected(Exception):
-    """The gateway refused the call (budget or per-run cost limit)."""
+    """The gateway refused the call: 402 for spending limits, 403 for the
+    agent's charter or a guardrail. Retrying would not help."""
 
     def __init__(self, kind: str, message: str):
         super().__init__(message)
@@ -58,7 +59,7 @@ class ToolOutcome:
 
 
 def _rejection(exc: Exception) -> GatewayRejected | None:
-    if getattr(exc, "status_code", None) != 402:
+    if getattr(exc, "status_code", None) not in (402, 403):
         return None
     body = getattr(exc, "body", None) or {}
     err = body.get("error", {}) if isinstance(body, dict) else {}

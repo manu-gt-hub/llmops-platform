@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_pill, score, pct %}
+{% block title %}Agents · Agent console{% endblock %}
+{% block content %}
+<h1>Agents</h1>
+<p class="muted">Registered in <code>config/agents.yaml</code>. The gateway enforces each agent's charter
+(models, tools, pause) on every call; the guardrail mode decides whether content guardrails only log
+(<em>monitor</em>) or block (<em>enforce</em>). Figures are for the last 7 days, demo data included.</p>
+
+{% for a in agents %}
+<div class="card">
+  <div style="display:flex; gap:.75rem; align-items:center; flex-wrap:wrap">
+    <h2 style="margin:0"><a href="/console/agents/{{ a.name }}">{{ a.name }}</a></h2>
+    {{ status_pill(a.status) }}
+    <span class="pill muted">guardrails: {{ a.guardrail_mode }}</span>
+    <span style="margin-left:auto">
+      <form class="inline" method="post" action="/console/agents/{{ a.name }}/status">
+        {% if a.status == "active" %}
+          <button name="value" value="paused" title="The gateway refuses every call of this agent">⏸ Pause</button>
+        {% else %}
+          <button name="value" value="active">▶ Resume</button>
+        {% endif %}
+      </form>
+      <form class="inline" method="post" action="/console/agents/{{ a.name }}/guardrail-mode">
+        {% if a.guardrail_mode == "monitor" %}
+          <button name="value" value="enforce">Enforce guardrails</button>
+        {% else %}
+          <button name="value" value="monitor">Monitor only</button>
+        {% endif %}
+      </form>
+    </span>
+  </div>
+  <p>{{ a.purpose }}</p>
+  <div class="grid">
+    <div><div class="muted small">Runs</div><div class="stat">{{ a.runs or 0 }}</div></div>
+    <div><div class="muted small">Success rate</div><div class="stat">{{ pct(a.success_rate) }}</div></div>
+    <div><div class="muted small">Judge score</div><div class="stat">{{ score(a.judge_score) }}</div></div>
+    <div><div class="muted small">Guardrail hits</div><div class="stat">{{ a.guardrail_hits or 0 }}</div></div>
+    <div><div class="muted small">Cost</div><div class="stat">${{ '%.2f' % (a.cost_usd or 0) }}</div></div>
+  </div>
+  <p class="small muted">Models: {{ a.models | join(", ") }} · Tools: {{ (a.tools | join(", ")) or "none" }} ·
+    Owner: {{ a.owner or "—" }} · Last change: {{ a.updated_at.strftime("%Y-%m-%d %H:%M") }} by {{ a.updated_by }}</p>
+</div>
+{% else %}
+<p>No agents registered. Add them to <code>config/agents.yaml</code> and restart the gateway.</p>
+{% endfor %}
+{% endblock %}

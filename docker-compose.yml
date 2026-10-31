@@ -41,6 +41,8 @@ services:
       POSTGRES_PORT: "5432"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       DEPLOY_ENV: ${DEPLOY_ENV:-local}
+      # The console's chat runs the demo agent inside the gateway container.
+      GATEWAY_URL: http://localhost:8080
     ports:
       - "${GATEWAY_HOST_PORT:-8090}:8080"
     depends_on:

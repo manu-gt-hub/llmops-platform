@@ -109,3 +109,64 @@ CREATE TABLE IF NOT EXISTS eval_results (
     synthetic   BOOLEAN     NOT NULL DEFAULT false
 );
 CREATE INDEX IF NOT EXISTS eval_results_ts_idx ON eval_results (ts);
+
+-- ---------------------------------------------------------------------------
+-- Governance (config/agents.yaml + console)
+-- ---------------------------------------------------------------------------
+
+-- Registered agents. The charter columns are refreshed from agents.yaml on
+-- start; status and guardrail_mode are the console's switches and are only
+-- set from the YAML the first time an agent appears.
+CREATE TABLE IF NOT EXISTS agents (
+    name               TEXT PRIMARY KEY,
+    purpose            TEXT        NOT NULL,
+    owner              TEXT,
+    models             TEXT[]      NOT NULL,
+    tools              TEXT[]      NOT NULL,
+    judge_sample_rate  NUMERIC(4, 3) NOT NULL DEFAULT 0,
+    status             TEXT        NOT NULL DEFAULT 'active',   -- active | paused
+    guardrail_mode     TEXT        NOT NULL DEFAULT 'monitor',  -- monitor | enforce
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_by         TEXT
+);
+
+-- What the judge and the console need to show a run.
+ALTER TABLE agent_runs  ADD COLUMN IF NOT EXISTS question TEXT;
+ALTER TABLE agent_runs  ADD COLUMN IF NOT EXISTS answer   TEXT;
+ALTER TABLE agent_steps ADD COLUMN IF NOT EXISTS output   TEXT;
+
+-- Every time a charter rule or a guardrail fires.
+CREATE TABLE IF NOT EXISTS guardrail_events (
+    id         BIGSERIAL PRIMARY KEY,
+    ts         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    agent      TEXT        NOT NULL,
+    project    TEXT        NOT NULL,
+    run_id     TEXT,
+    stage      TEXT        NOT NULL,   -- charter | input | output
+    rule       TEXT        NOT NULL,   -- e.g. model_not_allowed, pii_email, prompt_injection
+    action     TEXT        NOT NULL,   -- blocked | flagged
+    detail     TEXT,
+    synthetic  BOOLEAN     NOT NULL DEFAULT false
+);
+CREATE INDEX IF NOT EXISTS guardrail_events_ts_idx  ON guardrail_events (ts);
+CREATE INDEX IF NOT EXISTS guardrail_events_run_idx ON guardrail_events (run_id);
+
+-- LLM-as-judge grades (1-5 per criterion) and the optional human label
+-- that measures how much the judge can be trusted.
+CREATE TABLE IF NOT EXISTS judgements (
+    id            BIGSERIAL PRIMARY KEY,
+    ts            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    run_id        TEXT        NOT NULL REFERENCES agent_runs (run_id) ON DELETE CASCADE,
+    agent         TEXT        NOT NULL,
+    judge_model   TEXT        NOT NULL,
+    on_purpose    SMALLINT    NOT NULL,
+    grounded      SMALLINT    NOT NULL,
+    helpful       SMALLINT    NOT NULL,
+    score         NUMERIC(5, 4) NOT NULL,  -- mean of the three, scaled to 0-1
+    reasoning     TEXT,
+    human_label   TEXT,                    -- good | bad | NULL (not reviewed)
+    labeled_at    TIMESTAMPTZ,
+    synthetic     BOOLEAN     NOT NULL DEFAULT false
+);
+CREATE UNIQUE INDEX IF NOT EXISTS judgements_run_idx ON judgements (run_id);
+CREATE INDEX IF NOT EXISTS judgements_ts_idx ON judgements (ts);

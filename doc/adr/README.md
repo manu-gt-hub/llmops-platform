@@ -11,5 +11,6 @@ as such.
 | [0003](0003-dashboards-as-code.md) | Grafana dashboards generated from Python | Accepted |
 | [0004](0004-deterministic-evals-and-ci-gate.md) | Deterministic evals and a quality + cost gate in CI | Accepted |
 | [0005](0005-mock-provider-for-ci.md) | Mock provider for keyless end-to-end tests | Accepted |
+| [0006](0006-governance-in-the-gateway.md) | Agent governance in the gateway: charters, simple guardrails, sampled judge | Accepted |
 
 Back to [architecture](../architecture.md).

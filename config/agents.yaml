@@ -1,0 +1,44 @@
+# Agent registry: what each agent is for and what it may use.
+#
+# The gateway enforces it on every request that carries an X-Agent header:
+#   - unknown agent                 -> 403
+#   - agent paused (from the console) -> 403
+#   - model not in `models`         -> 403
+#   - a tool not in `tools` declared in the request -> 403
+#
+# `purpose` is also what the judge uses to decide whether a run stayed on task.
+#
+# Two switches are operated from the console (http://localhost:8090/console)
+# and kept in the database, so they survive restarts. The values here are
+# only the initial ones:
+#   status          active | paused
+#   guardrail_mode  monitor (log only) | enforce (block)
+#
+# Requests without X-Agent (plain apps such as rag-system) are not agents:
+# only budgets apply to them.
+
+agents:
+  research-agent:
+    purpose: >-
+      Answer questions from Acme Cloud employees about plans and pricing, the
+      SLA, the on-call policy and travel expenses, using only the Acme Cloud
+      handbook. It must not give legal, medical or financial advice, and must
+      not answer questions unrelated to Acme Cloud.
+    owner: platform-team
+    models: [claude-opus-5-5, claude-sonnet-5-5, gpt-4o-mini]
+    tools: [search_docs, read_doc, calculator]
+    status: active
+    guardrail_mode: enforce
+    # Share of finished runs the judge grades (0 = never, 1 = all).
+    judge_sample_rate: 1.0
+
+  judge:
+    purpose: >-
+      Grade the runs of other agents against their purpose. Internal agent of
+      the platform; it calls no tools.
+    owner: platform-team
+    models: [claude-sonnet-5-5, gpt-4o-mini]
+    tools: []
+    status: active
+    guardrail_mode: monitor
+    judge_sample_rate: 0

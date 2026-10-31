@@ -7,7 +7,7 @@ For every run it:
   - opens an OpenTelemetry span for the run and one per tool call, and sends
     the trace context to the gateway (its LLM spans join the same trace);
   - stops the run on max steps, on a tool-call loop, or when the gateway
-    refuses a call (budget / per-run cost limit).
+    refuses a call (budget, per-run cost limit, agent charter or guardrail).
 """
 
 import json
@@ -106,7 +106,7 @@ def run_task(question: str, choice: ProviderChoice, reporter: Reporter,
     }) as span:
         trace_id = format(span.get_span_context().trace_id, "032x")
         reporter.start(run_id=run_id, agent=config.AGENT_NAME, project=config.AGENT_PROJECT,
-                       task_id=task_id, model=choice.model, trace_id=trace_id)
+                       task_id=task_id, model=choice.model, trace_id=trace_id, question=question)
 
         for _ in range(config.MAX_STEPS):
             headers = {"X-Run-Id": run_id}
@@ -156,7 +156,7 @@ def run_task(question: str, choice: ProviderChoice, reporter: Reporter,
                         tool_span.set_status(trace.Status(trace.StatusCode.ERROR, detail))
                 reporter.step(run_id, step=steps, kind="tool", name=call.name, ok=ok,
                               latency_ms=int((time.perf_counter() - started) * 1000),
-                              detail=detail or json.dumps(call.args)[:500])
+                              detail=detail or json.dumps(call.args)[:500], output=outcomes[-1].output[:4000])
             if loop_detected:
                 status, stop_reason = "killed", "loop_detected"
                 break
@@ -165,7 +165,8 @@ def run_task(question: str, choice: ProviderChoice, reporter: Reporter,
         span.set_attributes({"llmops.status": status, "llmops.stop_reason": stop_reason,
                              "llmops.steps": steps, "llmops.tool_calls": tool_calls})
         totals = reporter.finish(run_id, status=status, stop_reason=stop_reason, steps=steps,
-                                 tool_calls=tool_calls, tool_errors=tool_errors, loop_detected=loop_detected)
+                                 tool_calls=tool_calls, tool_errors=tool_errors, loop_detected=loop_detected,
+                                 answer=answer)
 
     return RunResult(run_id, status, stop_reason, answer, steps, tool_calls, tool_errors, loop_detected,
                      float(totals.get("cost_usd", 0.0)), int(totals.get("total_tokens", 0)), trace_id)

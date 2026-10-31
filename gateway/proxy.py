@@ -6,8 +6,9 @@ Clients keep using the official SDKs and only change the base URL:
   Anthropic(base_url="http://gateway:8080/anthropic")
   OpenAI(base_url="http://gateway:8080/openai/v1")
 
-The gateway swaps in the real API key, enforces the guardrails (project
-budget, per-run cost), forwards the request untouched (streaming included)
+The gateway swaps in the real API key, enforces the limits (project budget,
+per-run cost, the agent's charter and guardrails, see governance.py),
+forwards the request untouched (streaming included)
 and records tokens, cost and latency of every call.
 """
 
@@ -21,7 +22,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from opentelemetry import trace
 
-from gateway import config, db, metrics
+from gateway import config, db, governance, metrics
 from gateway.budgets import Budgets, over_budget
 from gateway.pricing import PriceList
 from gateway.telemetry import trace_id_hex
@@ -95,7 +96,7 @@ class Proxy:
     async def aclose(self) -> None:
         await self.client.aclose()
 
-    async def guardrails(self, who: Attribution) -> JSONResponse | None:
+    async def spending_limits(self, who: Attribution) -> JSONResponse | None:
         """402 (not retried by the SDKs) when a limit is already reached."""
         budget = self.budgets.for_project(who.project)
         spent = await db.month_spend(who.project)
@@ -113,15 +114,40 @@ class Proxy:
                               f"(${run_cost:.4f} of ${config.MAX_RUN_COST_USD:.2f}).")
         return None
 
+    async def agent_rules(self, provider: str, body: dict, who: Attribution) -> tuple[JSONResponse | None, str]:
+        """Charter rules and input guardrails for agent traffic (X-Agent).
+        Returns (rejection or None, the agent's guardrail mode)."""
+        if not who.agent:
+            return None, "off"
+        agent = await governance.get_agent(who.agent)
+        model = str(body.get("model") or "")
+        violations = governance.charter_violations(agent, who.agent, model, governance.declared_tools(provider, body))
+        if violations:
+            await governance.record(who.agent, who.project, who.run_id, violations, "blocked")
+            metrics.REJECTED.labels(who.project, violations[0].rule).inc()
+            return _error(403, violations[0].rule, violations[0].detail), "enforce"
+
+        findings = [f for text in governance.new_input_texts(body) for f in governance.scan("input", text)]
+        if findings:
+            action = "blocked" if agent.guardrail_mode == "enforce" else "flagged"
+            await governance.record(who.agent, who.project, who.run_id, findings, action)
+            if action == "blocked":
+                metrics.REJECTED.labels(who.project, findings[0].rule).inc()
+                return _error(403, findings[0].rule, f"input guardrail: {findings[0].rule}"), agent.guardrail_mode
+        return None, agent.guardrail_mode
+
     async def forward(self, request: Request, provider: str, path: str, who: Attribution) -> Response:
         upstream = UPSTREAMS[provider]
         if not upstream.api_key:
             return _error(503, "provider_not_configured",
                           f"{upstream.key_env} is not set in the gateway's .env")
-        if (rejection := await self.guardrails(who)) is not None:
+        if (rejection := await self.spending_limits(who)) is not None:
             return rejection
 
         raw, body = _prepare_body(provider, path, await request.body())
+        rejection, guardrail_mode = await self.agent_rules(provider, body, who)
+        if rejection is not None:
+            return rejection
         headers = {k: v for k, v in request.headers.items() if k.lower() not in _DROP_REQUEST_HEADERS}
         headers.update(upstream.auth_headers(provider))
         url = f"{upstream.base_url}/{path}"
@@ -165,10 +191,11 @@ class Proxy:
 
         content = await resp.aread()
         await resp.aclose()
-        model, usage, error = requested_model, Usage(), None
+        model, usage, error, parsed = requested_model, Usage(), None, None
         if resp.status_code == 200:
             try:
-                parsed_model, usage = parse_response(provider, json.loads(content))
+                parsed = json.loads(content)
+                parsed_model, usage = parse_response(provider, parsed)
                 model = parsed_model or requested_model
             except ValueError:
                 pass
@@ -176,6 +203,16 @@ class Proxy:
             error = content[:500].decode(errors="replace")
         await self._record(provider, path, who, model, usage, started,
                            resp.status_code, error, False, span)
+
+        # Output guardrails (non-streaming responses only: a stream has
+        # already reached the client by the time it can be inspected).
+        if who.agent and isinstance(parsed, dict):
+            findings = governance.scan("output", governance.output_text(provider, parsed))
+            if findings:
+                action = "blocked" if guardrail_mode == "enforce" else "flagged"
+                await governance.record(who.agent, who.project, who.run_id, findings, action)
+                if action == "blocked":
+                    return _error(403, findings[0].rule, f"output guardrail: {findings[0].rule}")
         return Response(content, status_code=resp.status_code, headers=response_headers)
 
     async def _stream(self, resp, provider, path, who, requested_model, started, span):

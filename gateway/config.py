@@ -39,6 +39,13 @@ DEFAULT_PROJECT = os.getenv("DEFAULT_PROJECT", "default")
 # gateway refuses its next LLM call with 429.
 MAX_RUN_COST_USD = float(os.getenv("MAX_RUN_COST_USD", "0.50"))
 
+# --- Governance (config/agents.yaml) and LLM-as-judge ---
+AGENTS_FILE = Path(os.getenv("AGENTS_FILE", PROJECT_ROOT / "config" / "agents.yaml"))
+# Empty = claude-sonnet-5-5 if the Anthropic key is set, else gpt-4o-mini.
+JUDGE_MODEL = os.getenv("JUDGE_MODEL", "").strip()
+# How the gateway reaches itself (the judge's calls go through the gateway).
+GATEWAY_SELF_URL = os.getenv("GATEWAY_SELF_URL", "http://localhost:8080").rstrip("/")
+
 PRICING_FILE = Path(os.getenv("PRICING_FILE", PROJECT_ROOT / "config" / "pricing.yaml"))
 BUDGETS_FILE = Path(os.getenv("BUDGETS_FILE", PROJECT_ROOT / "config" / "budgets.yaml"))
 

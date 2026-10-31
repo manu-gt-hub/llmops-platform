@@ -11,6 +11,9 @@ explains what the charts show:
   v0.3.0  prompt caching for the agent  -> cache reads up, cost per run down
   v0.4.0  support-bot routes simple questions to Claude Haiku 5.5
 
+It also fills the governance tables: judge grades (some labeled by a human)
+and guardrail events, so the console has something to show.
+
 Every row is flagged synthetic=true: Grafana can hide it, and it never counts
 towards the budgets enforced by the gateway. Deterministic (fixed seed).
 
@@ -19,11 +22,13 @@ Run manually with:  python -m gateway.seed [--days 30] [--force]
 
 import argparse
 import asyncio
+import json
 import logging
 import random
 from datetime import UTC, datetime, time, timedelta
 
 from gateway import config, db
+from gateway.judge import PASS_SCORE, parse_verdict
 from gateway.pricing import PriceList
 from gateway.usage import Usage
 
@@ -38,7 +43,10 @@ RELEASES = [  # (days before now, version, notes)
     (3, "0.4.0", "support-bot routes simple questions to Claude Haiku 5.5"),
 ]
 TOOLS = ["search_docs", "read_doc", "calculator"]
-EVAL_TASKS = [f"task-{i:02d}" for i in range(1, 9)]
+TASKS = {t["id"]: t for t in json.loads((config.PROJECT_ROOT / "agent" / "tasks.json").read_text(encoding="utf-8"))}
+EVAL_TASKS = sorted(TASKS)
+JUDGE_SAMPLE = 0.4   # share of demo runs with a judge grade
+HUMAN_LABELED = 0.3  # share of graded runs a human labeled
 
 REQUEST_COLUMNS = (
     "ts", "provider", "model", "project", "agent", "run_id", "endpoint", "streamed",
@@ -49,10 +57,13 @@ REQUEST_COLUMNS = (
 RUN_COLUMNS = (
     "run_id", "agent", "project", "task_id", "model", "started_at", "finished_at", "status",
     "stop_reason", "steps", "tool_calls", "tool_errors", "loop_detected", "score", "cost_usd",
-    "total_tokens", "release", "synthetic",
+    "total_tokens", "release", "synthetic", "question", "answer",
 )
 STEP_COLUMNS = ("run_id", "step", "ts", "kind", "name", "ok", "latency_ms", "detail", "synthetic")
 EVAL_COLUMNS = ("ts", "suite_id", "task_id", "run_id", "model", "passed", "score", "cost_usd", "release", "synthetic")
+JUDGEMENT_COLUMNS = ("ts", "run_id", "agent", "judge_model", "on_purpose", "grounded", "helpful", "score",
+                     "reasoning", "human_label", "labeled_at", "synthetic")
+EVENT_COLUMNS = ("ts", "agent", "project", "run_id", "stage", "rule", "action", "detail", "synthetic")
 
 
 class Generator:
@@ -66,6 +77,8 @@ class Generator:
         self.runs: list[tuple] = []
         self.steps: list[tuple] = []
         self.evals: list[tuple] = []
+        self.judgements: list[tuple] = []
+        self.events: list[tuple] = []
 
     def release_at(self, ts: datetime) -> str:
         current = self.releases[0][1] if self.releases else "0.1.0"
@@ -143,11 +156,33 @@ class Generator:
         status = "killed" if loop else ("success" if success else "failed")
         stop = "loop_detected" if loop else ("end_turn" if success else "wrong_answer")
         score = 0.0 if loop else (round(rng.uniform(0.8, 1.0), 3) if success else round(rng.uniform(0.0, 0.5), 3))
+        task = TASKS[task_id]
+        expected = task.get("expected_number", " ".join(task.get("expected_keywords", [])))
+        answer = None if loop else (f"According to the handbook, the answer is {expected}." if success
+                                    else "I could not find a definitive answer in the handbook.")
         self.runs.append((
             run_id, "research-agent", "research-agent", task_id, "claude-opus-5-5", ts, t, status, stop,
             step, tool_calls, tool_errors, loop, score, round(cost, 8), int(tokens), release, True,
+            task["question"], answer,
         ))
+        if answer and rng.random() < JUDGE_SAMPLE:
+            self.judge(t, run_id, success)
         return cost, success
+
+    def judge(self, ts: datetime, run_id: str, success: bool) -> None:
+        rng = self.rng
+        good = (4, 5) if success else (1, 3)
+        grades = parse_verdict({"on_purpose": 5, "grounded": rng.randint(*good), "helpful": rng.randint(*good),
+                                "reasoning": "Answer matches the handbook." if success
+                                else "The answer does not state the figure the handbook supports."})
+        label = labeled_at = None
+        if rng.random() < HUMAN_LABELED:
+            agrees = rng.random() < 0.88  # the demo judge agrees with humans ~88% of the time
+            label = "good" if (grades["score"] >= PASS_SCORE) == agrees else "bad"
+            labeled_at = ts + timedelta(hours=rng.randint(1, 20))
+        self.judgements.append((ts + timedelta(seconds=5), run_id, "research-agent", "claude-sonnet-5-5",
+                                grades["on_purpose"], grades["grounded"], grades["helpful"], grades["score"],
+                                grades["reasoning"], label, labeled_at, True))
 
     def generate(self) -> None:
         rng = self.rng
@@ -171,6 +206,16 @@ class Generator:
                     self.evals.append((ts, suite, task, run_id, "claude-opus-5-5", passed, score,
                                        round(cost, 8), release, True))
                     ts += timedelta(seconds=40)
+
+            # Guardrail events on the research agent's inputs.
+            for rule, chance, detail in (("prompt_injection", 0.5, "ignore previous instructions"),
+                                         ("pii_email", 0.35, "…com"), ("model_not_allowed", 0.1, "gpt-4o")):
+                ts = self.timestamp(day)
+                if ts and rng.random() < chance:
+                    stage = "charter" if rule == "model_not_allowed" else "input"
+                    action = "flagged" if self.release_at(ts) < "0.2.0" and stage == "input" else "blocked"
+                    self.events.append((ts, "research-agent", "research-agent", None, stage, rule, action,
+                                        detail, True))
 
             # support-bot: single-turn chat; Haiku routing from 0.4.0.
             for _ in range(self.day_volume(day, 110)):
@@ -219,14 +264,18 @@ async def seed(days: int) -> dict:
         await _copy(conn, "agent_runs", RUN_COLUMNS, gen.runs)
         await _copy(conn, "agent_steps", STEP_COLUMNS, gen.steps)
         await _copy(conn, "eval_results", EVAL_COLUMNS, gen.evals)
-    counts = {"requests": len(gen.requests), "runs": len(gen.runs), "evals": len(gen.evals)}
+        await _copy(conn, "judgements", JUDGEMENT_COLUMNS, gen.judgements)
+        await _copy(conn, "guardrail_events", EVENT_COLUMNS, gen.events)
+    counts = {"requests": len(gen.requests), "runs": len(gen.runs), "evals": len(gen.evals),
+              "judgements": len(gen.judgements), "guardrail_events": len(gen.events)}
     log.info("seeded %s days of demo data: %s", days, counts)
     return counts
 
 
 async def clear() -> None:
     async with db.pool.connection() as conn:
-        for table in ("agent_steps", "eval_results", "agent_runs", "llm_requests", "deployments"):
+        for table in ("judgements", "guardrail_events", "agent_steps", "eval_results", "agent_runs",
+                      "llm_requests", "deployments"):
             await conn.execute(f"DELETE FROM {table} WHERE synthetic")
 
 

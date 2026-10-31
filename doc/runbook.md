@@ -51,6 +51,17 @@ their cost is recorded as $0, so the dashboards under-report spend.
 2. Did it start at a release? Run the suite on the previous version:
    `docker compose run --rm agent --gate`.
 
+## Agent misbehaving
+
+Stop it first, investigate after: **console → Agents → ⏸ Pause**. Every call
+of that agent gets 403 until it is resumed. Then:
+
+1. Console → the agent → *Guardrail events* and *Recent runs*.
+2. A burst of `prompt_injection`: look at the run's tool outputs; a document
+   in the knowledge base may contain injected instructions.
+3. Low judge scores: open a few runs, label them; if the labels disagree with
+   the judge, the judge (or its rubric in `gateway/judge.py`) is the problem.
+
 ## Useful commands
 
 ```bash
