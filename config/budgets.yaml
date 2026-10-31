@@ -1,0 +1,25 @@
+# Monthly spend budgets per project (USD), enforced by the gateway.
+#
+#   monthly_usd  hard limit: once the month-to-date spend of the project
+#                reaches it, the gateway answers 429 without calling the
+#                provider.
+#   alert_at     fraction of the budget that fires the Grafana alert.
+#
+# Only real traffic counts towards the limit; the synthetic demo data is
+# shown on the dashboards but never blocks requests.
+# Projects not listed here fall back to `default`.
+
+default:
+  monthly_usd: 20
+  alert_at: 0.8
+
+projects:
+  research-agent:
+    monthly_usd: 80
+    alert_at: 0.8
+  rag-system:
+    monthly_usd: 10
+    alert_at: 0.8
+  support-bot:
+    monthly_usd: 40
+    alert_at: 0.9

@@ -1,0 +1,43 @@
+[
+  {
+    "id": "task-01",
+    "question": "How much does the Pro plan cost per year for 12 seats with annual billing?",
+    "expected_number": 3549.6
+  },
+  {
+    "id": "task-02",
+    "question": "Within how many minutes must a Sev1 page be acknowledged?",
+    "expected_number": 15
+  },
+  {
+    "id": "task-03",
+    "question": "An Enterprise workspace had 99.5% uptime last month. What service credit percentage does the customer get?",
+    "expected_number": 10
+  },
+  {
+    "id": "task-04",
+    "question": "How much on-call stipend does an engineer earn for 3 weeks of primary rotation?",
+    "expected_number": 450
+  },
+  {
+    "id": "task-05",
+    "question": "What is the maximum I can expense for hotel and meals on a trip of 4 nights with 4 travel days?",
+    "expected_number": 800
+  },
+  {
+    "id": "task-06",
+    "question": "Which plan do I need if my company requires single sign-on?",
+    "expected_keywords": ["enterprise"]
+  },
+  {
+    "id": "task-07",
+    "question": "What is the total monthly cost of a company with one workspace of 5 Starter seats and another of 3 Pro seats?",
+    "expected_number": 147
+  },
+  {
+    "id": "task-08",
+    "question": "Who has to approve a travel expense of 700 euros?",
+    "expected_keywords": ["manager"],
+    "forbidden_keywords": ["director"]
+  }
+]

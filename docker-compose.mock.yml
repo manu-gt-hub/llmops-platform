@@ -1,0 +1,30 @@
+# Keyless end-to-end setup: the gateway talks to a mock provider instead of
+# Anthropic / OpenAI. Used by CI and handy to try the agent for free.
+#   docker compose -f docker-compose.yml -f docker-compose.mock.yml up -d --build
+#   docker compose -f docker-compose.yml -f docker-compose.mock.yml run --rm agent
+services:
+  mock-llm:
+    build:
+      context: .
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-local}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    image: llmops-platform:local
+    command: ["uvicorn", "tools.mock_llm:app", "--host", "0.0.0.0", "--port", "9000"]
+    volumes:
+      - ./tools:/app/tools:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/docs', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  gateway:
+    environment:
+      ANTHROPIC_UPSTREAM: http://mock-llm:9000
+      OPENAI_UPSTREAM: http://mock-llm:9000
+      ANTHROPIC_API_KEY: mock-key
+      OPENAI_API_KEY: mock-key
+    depends_on:
+      mock-llm:
+        condition: service_healthy

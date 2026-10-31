@@ -1,0 +1,3 @@
+# Keep LF everywhere: generated dashboards are compared byte for byte in CI,
+# and shell snippets run in Linux containers.
+* text=auto eol=lf
