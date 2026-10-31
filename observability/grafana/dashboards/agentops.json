@@ -1,0 +1,1011 @@
+{
+  "uid": "llmops-agentops",
+  "title": "LLMOps — AgentOps",
+  "description": "Agent runs, outcomes, loops, tool reliability, eval quality and traces",
+  "tags": [
+    "llmops"
+  ],
+  "timezone": "browser",
+  "editable": false,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "templating": {
+    "list": [
+      {
+        "name": "source",
+        "label": "Data",
+        "type": "custom",
+        "query": "all,real,demo",
+        "current": {
+          "text": "all",
+          "value": "all"
+        },
+        "options": [
+          {
+            "text": "all",
+            "value": "all",
+            "selected": true
+          },
+          {
+            "text": "real",
+            "value": "real",
+            "selected": false
+          },
+          {
+            "text": "demo",
+            "value": "demo",
+            "selected": false
+          }
+        ],
+        "description": "real = traffic through the gateway; demo = synthetic seed data"
+      },
+      {
+        "name": "project",
+        "label": "Project",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "llmops-postgres"
+        },
+        "query": "SELECT DISTINCT project FROM llm_requests ORDER BY 1",
+        "definition": "SELECT DISTINCT project FROM llm_requests ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "sort": 1
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "name": "Releases",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "llmops-postgres"
+        },
+        "enable": true,
+        "iconColor": "#A352CC",
+        "target": {
+          "refId": "Anno",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT ts AS time, 'Release ' || version || COALESCE(' — ' || notes, '') AS text, service AS tags FROM deployments WHERE $__timeFilter(ts) AND ('$source' = 'all' OR synthetic = ('$source' = 'demo'))",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "LLMOps",
+      "type": "dashboards",
+      "tags": [
+        "llmops"
+      ],
+      "asDropdown": false,
+      "includeVars": true,
+      "keepTime": true
+    },
+    {
+      "title": "Architecture",
+      "type": "link",
+      "url": "http://localhost:8090/architecture",
+      "targetBlank": true,
+      "icon": "doc"
+    }
+  ],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Runs",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT COUNT(*) FROM agent_runs WHERE $__timeFilter(started_at) AND status <> 'running' AND ('$source' = 'all' OR synthetic = ('$source' = 'demo')) AND project IN ($project)",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": null,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Success rate",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT AVG((status = 'success')::int) FROM agent_runs WHERE $__timeFilter(started_at) AND status <> 'running' AND ('$source' = 'all' OR synthetic = ('$source' = 'demo')) AND project IN ($project)",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "red"
+              },
+              {
+                "value": 0.7,
+                "color": "orange"
+              },
+              {
+                "value": 0.85,
+                "color": "green"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 2,
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Killed by guardrails",
+      "description": "Runs stopped for loops, max steps or the per-run cost limit",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT COUNT(*) FROM agent_runs WHERE status = 'killed' AND $__timeFilter(started_at) AND status <> 'running' AND ('$source' = 'all' OR synthetic = ('$source' = 'demo')) AND project IN ($project)",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": null,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "orange"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 3,
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Avg steps per run",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT AVG(steps) FROM agent_runs WHERE $__timeFilter(started_at) AND status <> 'running' AND ('$source' = 'all' OR synthetic = ('$source' = 'demo')) AND project IN ($project)",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 4,
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Tool error rate",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT AVG((NOT ok)::int) FROM agent_steps WHERE kind = 'tool' AND $__timeFilter(ts) AND ('$source' = 'all' OR synthetic = ('$source' = 'demo'))",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 0.05,
+                "color": "orange"
+              },
+              {
+                "value": 0.15,
+                "color": "red"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 5,
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Eval pass rate",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT AVG(passed::int) FROM eval_results WHERE $__timeFilter(ts) AND ('$source' = 'all' OR synthetic = ('$source' = 'demo'))",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "red"
+              },
+              {
+                "value": 0.75,
+                "color": "orange"
+              },
+              {
+                "value": 0.875,
+                "color": "green"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 6,
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Runs per day by outcome",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT $__timeGroupAlias(started_at, '1d', 0), COUNT(*) FILTER (WHERE status = 'success') AS \"success\", COUNT(*) FILTER (WHERE status = 'failed') AS \"failed\", COUNT(*) FILTER (WHERE status = 'killed') AS \"killed\", COUNT(*) FILTER (WHERE status = 'error') AS \"error\" FROM agent_runs WHERE $__timeFilter(started_at) AND status <> 'running' AND ('$source' = 'all' OR synthetic = ('$source' = 'demo')) AND project IN ($project) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": null,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 2,
+            "fillOpacity": 80,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "spanNulls": true,
+            "pointSize": 4,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "axisSoftMin": 0
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "success"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#56A64B"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "killed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#C4162A"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8F3BB8"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Eval pass rate and steps per run",
+      "description": "Quality (nightly eval suite) against effort (steps). Releases are annotated.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT $__timeGroupAlias(ts, '1d', 0), AVG(passed::int) AS \"eval pass rate\" FROM eval_results WHERE $__timeFilter(ts) AND ('$source' = 'all' OR synthetic = ('$source' = 'demo')) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT $__timeGroupAlias(started_at, '1d', 0), AVG(steps) AS \"avg steps\" FROM agent_runs WHERE $__timeFilter(started_at) AND status <> 'running' AND ('$source' = 'all' OR synthetic = ('$source' = 'demo')) AND project IN ($project) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": null,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "spanNulls": true,
+            "pointSize": 4,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisSoftMin": 0
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "eval pass rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "avg steps"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 8,
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      }
+    },
+    {
+      "type": "table",
+      "title": "Tools",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT name AS tool, COUNT(*) AS calls, COUNT(*) FILTER (WHERE NOT ok) AS errors, AVG((NOT ok)::int) AS \"error rate\", percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) AS \"p95 ms\" FROM agent_steps WHERE kind = 'tool' AND $__timeFilter(ts) AND ('$source' = 'all' OR synthetic = ('$source' = 'demo')) GROUP BY 1 ORDER BY calls DESC",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95 ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": []
+      },
+      "id": 9,
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 10,
+        "h": 7
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Stop reasons",
+      "description": "Why runs ended, other than a normal answer",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT $__timeGroupAlias(started_at, '1d', 0), stop_reason AS metric, COUNT(*) AS value FROM agent_runs WHERE $__timeFilter(started_at) AND status <> 'running' AND ('$source' = 'all' OR synthetic = ('$source' = 'demo')) AND project IN ($project) AND stop_reason <> 'end_turn' GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": null,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 2,
+            "fillOpacity": 80,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "spanNulls": true,
+            "pointSize": 4,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "axisSoftMin": 0
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 10,
+      "gridPos": {
+        "x": 10,
+        "y": 13,
+        "w": 14,
+        "h": 7
+      }
+    },
+    {
+      "type": "table",
+      "title": "Recent runs",
+      "description": "Real runs carry a trace id: click it to open the trace",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT started_at AS started, run_id, task_id AS task, model, status, stop_reason, steps, tool_calls AS tools, tool_errors, loop_detected AS loop, total_tokens AS tokens, cost_usd AS cost, trace_id AS trace FROM agent_runs WHERE $__timeFilter(started_at) AND status <> 'running' AND ('$source' = 'all' OR synthetic = ('$source' = 'demo')) AND project IN ($project) ORDER BY started_at DESC LIMIT 50",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cost"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "trace"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open trace in Tempo",
+                    "url": "/explore?schemaVersion=1&panes=%7B%22t%22%3A%7B%22datasource%22%3A%22llmops-tempo%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22llmops-tempo%22%7D%2C%22queryType%22%3A%22traceql%22%2C%22query%22%3A%22${__value.raw}%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-7d%22%2C%22to%22%3A%22now%22%7D%7D%7D"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": []
+      },
+      "id": 11,
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 24,
+        "h": 10
+      }
+    },
+    {
+      "type": "table",
+      "title": "Agent traces (Tempo)",
+      "datasource": {
+        "type": "tempo",
+        "uid": "llmops-tempo"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "llmops-tempo"
+          },
+          "queryType": "traceql",
+          "limit": 20,
+          "tableType": "traces",
+          "query": "{ span.gen_ai.operation.name = \"invoke_agent\" }"
+        }
+      ],
+      "description": "Latest agent runs as traces: run span → LLM calls (gateway) and tool calls",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      },
+      "id": 12,
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 24,
+        "h": 8
+      }
+    }
+  ]
+}

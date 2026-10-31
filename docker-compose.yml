@@ -1,0 +1,122 @@
+# Full stack: gateway, PostgreSQL, Prometheus, Tempo, Grafana (+ demo agent).
+#   cp .env.example .env          # optional: add ANTHROPIC_API_KEY / OPENAI_API_KEY
+#   docker compose up -d --build
+#   open http://localhost:3000    # dashboards
+#   docker compose run --rm agent # send real traffic through the gateway
+
+# Gateway and agent share one image; both declare the build so that either
+# can be started first.
+x-build: &build
+  context: .
+  args:
+    GIT_COMMIT: ${GIT_COMMIT:-local}
+    BUILD_DATE: ${BUILD_DATE:-unknown}
+
+services:
+  db:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-llmops}
+      POSTGRES_USER: ${POSTGRES_USER:-llmops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-llmops}
+    ports:
+      # Exposed only to run the gateway / tests outside Docker
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-llmops} -d ${POSTGRES_DB:-llmops}"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  gateway:
+    build: *build
+    image: llmops-platform:local
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+      DEPLOY_ENV: ${DEPLOY_ENV:-local}
+    ports:
+      - "${GATEWAY_HOST_PORT:-8090}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Demo agent: one-shot job, not started by `up`.
+  #   docker compose run --rm agent                      # task suite
+  #   docker compose run --rm agent --ask "Which plan has SSO?"
+  #   docker compose run --rm agent --loop 300           # traffic every 5 min
+  agent:
+    build: *build
+    image: llmops-platform:local
+    profiles: ["agent"]
+    entrypoint: ["python", "-m", "agent.run_tasks"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      GATEWAY_URL: http://gateway:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+    volumes:
+      - ./results:/app/results
+    depends_on:
+      gateway:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    ports:
+      - "${PROMETHEUS_HOST_PORT:-9090}:9090"
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    # The image runs as uid 10001; root avoids volume permission issues locally.
+    user: "0"
+    command: ["-config.file=/etc/tempo.yml"]
+    volumes:
+      - ./observability/tempo/tempo.yml:/etc/tempo.yml:ro
+      - tempodata:/var/tempo
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/overview.json
+      GF_USERS_DEFAULT_THEME: system
+      POSTGRES_DB: ${POSTGRES_DB:-llmops}
+      POSTGRES_USER: ${POSTGRES_USER:-llmops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-llmops}
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "${GRAFANA_HOST_PORT:-3000}:3000"
+    depends_on:
+      - db
+      - prometheus
+      - tempo
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  promdata:
+  tempodata:
+  grafanadata:

@@ -1,0 +1,6 @@
+{
+  "_comment": "Quality and cost gate for CI (agent.run_tasks --gate). Per model id; 'default' for others. Refresh avg_cost_usd from results/eval_summary.json when a change is meant to alter cost.",
+  "default":          {"min_pass_rate": 0.75, "avg_cost_usd": 0.05,  "cost_tolerance": 0.25},
+  "claude-opus-5-5":  {"min_pass_rate": 0.875, "avg_cost_usd": 0.06, "cost_tolerance": 0.25},
+  "gpt-4o-mini":      {"min_pass_rate": 0.75, "avg_cost_usd": 0.002, "cost_tolerance": 0.25}
+}

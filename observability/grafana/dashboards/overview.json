@@ -1,0 +1,776 @@
+{
+  "uid": "llmops-overview",
+  "title": "LLMOps — Overview",
+  "description": "Spend, tokens, last release and agent health at a glance",
+  "tags": [
+    "llmops"
+  ],
+  "timezone": "browser",
+  "editable": false,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "templating": {
+    "list": [
+      {
+        "name": "source",
+        "label": "Data",
+        "type": "custom",
+        "query": "all,real,demo",
+        "current": {
+          "text": "all",
+          "value": "all"
+        },
+        "options": [
+          {
+            "text": "all",
+            "value": "all",
+            "selected": true
+          },
+          {
+            "text": "real",
+            "value": "real",
+            "selected": false
+          },
+          {
+            "text": "demo",
+            "value": "demo",
+            "selected": false
+          }
+        ],
+        "description": "real = traffic through the gateway; demo = synthetic seed data"
+      },
+      {
+        "name": "project",
+        "label": "Project",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "llmops-postgres"
+        },
+        "query": "SELECT DISTINCT project FROM llm_requests ORDER BY 1",
+        "definition": "SELECT DISTINCT project FROM llm_requests ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "sort": 1
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "name": "Releases",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "llmops-postgres"
+        },
+        "enable": true,
+        "iconColor": "#A352CC",
+        "target": {
+          "refId": "Anno",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT ts AS time, 'Release ' || version || COALESCE(' — ' || notes, '') AS text, service AS tags FROM deployments WHERE $__timeFilter(ts) AND ('$source' = 'all' OR synthetic = ('$source' = 'demo'))",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "LLMOps",
+      "type": "dashboards",
+      "tags": [
+        "llmops"
+      ],
+      "asDropdown": false,
+      "includeVars": true,
+      "keepTime": true
+    },
+    {
+      "title": "Architecture",
+      "type": "link",
+      "url": "http://localhost:8090/architecture",
+      "targetBlank": true,
+      "icon": "doc"
+    }
+  ],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Last release",
+      "description": "Latest gateway release that started",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT version, ts FROM deployments WHERE ('$source' = 'all' OR synthetic = ('$source' = 'demo')) ORDER BY ts DESC LIMIT 1",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": null,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "#3274D9"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/^version$/",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Deployed",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT extract(epoch FROM ts) * 1000 AS deployed FROM deployments WHERE ('$source' = 'all' OR synthetic = ('$source' = 'demo')) ORDER BY ts DESC LIMIT 1",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeFromNow",
+          "decimals": null,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 2,
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Spend month to date",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT COALESCE(SUM(cost_usd), 0) FROM llm_requests WHERE ts >= date_trunc('month', now()) AND ('$source' = 'all' OR synthetic = ('$source' = 'demo')) AND project IN ($project)",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 3,
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Tokens today",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens), 0) FROM llm_requests WHERE ts >= date_trunc('day', now()) AND ('$source' = 'all' OR synthetic = ('$source' = 'demo')) AND project IN ($project)",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 4,
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Agent success rate (7d)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT AVG((status = 'success')::int) FROM agent_runs WHERE started_at >= now() - interval '7 days' AND status <> 'running' AND ('$source' = 'all' OR synthetic = ('$source' = 'demo'))",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "red"
+              },
+              {
+                "value": 0.7,
+                "color": "orange"
+              },
+              {
+                "value": 0.85,
+                "color": "green"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 5,
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Eval pass rate (7d)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT AVG(passed::int) FROM eval_results WHERE ts >= now() - interval '7 days' AND ('$source' = 'all' OR synthetic = ('$source' = 'demo'))",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "red"
+              },
+              {
+                "value": 0.75,
+                "color": "orange"
+              },
+              {
+                "value": 0.875,
+                "color": "green"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 6,
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Spend per day by project",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT $__timeGroupAlias(ts, '1d', 0), project AS metric, SUM(cost_usd) AS value FROM llm_requests WHERE $__timeFilter(ts) AND ('$source' = 'all' OR synthetic = ('$source' = 'demo')) AND project IN ($project) GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 2,
+            "fillOpacity": 80,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "spanNulls": true,
+            "pointSize": 4,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "axisSoftMin": 0
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Tokens per day",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT $__timeGroupAlias(ts, '1d', 0), SUM(input_tokens) AS \"input\", SUM(output_tokens) AS \"output\", SUM(cache_read_tokens) AS \"cache read\", SUM(cache_write_tokens) AS \"cache write\" FROM llm_requests WHERE $__timeFilter(ts) AND ('$source' = 'all' OR synthetic = ('$source' = 'demo')) AND project IN ($project) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": null,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 2,
+            "fillOpacity": 80,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "spanNulls": true,
+            "pointSize": 4,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "axisSoftMin": 0
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 8,
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Budget used this month",
+      "description": "Month-to-date spend / monthly budget (config/budgets.yaml)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT r.project AS \"project\", SUM(r.cost_usd) / MAX(COALESCE(b.monthly_usd, d.monthly_usd)) AS \"used\" FROM llm_requests r LEFT JOIN budgets b ON b.project = r.project CROSS JOIN (SELECT monthly_usd FROM budgets WHERE project = 'default') d WHERE r.ts >= date_trunc('month', now()) AND ('$source' = 'all' OR r.synthetic = ('$source' = 'demo')) AND r.project IN ($project) GROUP BY 1 ORDER BY 2 DESC",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1.2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 0.8,
+                "color": "orange"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      },
+      "id": 9,
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 10,
+        "h": 8
+      }
+    },
+    {
+      "type": "table",
+      "title": "Release history",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT ts AS \"deployed\", version, git_commit AS \"commit\", environment, notes FROM deployments WHERE ('$source' = 'all' OR synthetic = ('$source' = 'demo')) ORDER BY ts DESC LIMIT 20",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": []
+      },
+      "id": 10,
+      "gridPos": {
+        "x": 10,
+        "y": 13,
+        "w": 14,
+        "h": 8
+      }
+    },
+    {
+      "type": "text",
+      "title": "About this platform",
+      "options": {
+        "mode": "markdown",
+        "content": "\n**LLMOps Platform** — every LLM call goes through the gateway, which records tokens, cost and latency,\nenforces budgets and traces agent runs.\n\n| Dashboard | What it answers |\n|---|---|\n| **FinOps** | Where does the money go? Cost per model / project / successful run, cache savings, forecast |\n| **AgentOps** | Do the agents work? Success rate, steps, loops, tool errors, eval scores, traces |\n| **Platform** | What is deployed and is it healthy? Releases, throughput, latency, errors |\n\n📐 [Architecture](http://localhost:8090/architecture) · 🔌 [Gateway API](http://localhost:8090/docs) ·\n📈 [Prometheus](http://localhost:9090) · Use the **Data** selector to switch between real and demo data.\n"
+      },
+      "id": 11,
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 24,
+        "h": 6
+      }
+    }
+  ]
+}

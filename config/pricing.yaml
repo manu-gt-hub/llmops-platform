@@ -1,0 +1,35 @@
+# LLM price list used by the gateway to compute the cost of every request.
+# Prices are USD per 1M tokens. Keep this file under review: a model that is
+# not listed here is still proxied, but its cost is recorded as 0 and the
+# request is flagged as "unpriced" (there is a dashboard panel and an alert
+# for it).
+#
+#   input        uncached input tokens
+#   output       output tokens (thinking tokens are billed as output)
+#   cache_read   input tokens served from the prompt cache
+#   cache_write  input tokens written to the prompt cache (5-minute TTL)
+#
+# Matching: exact model id first, then the longest `prefix` match, so dated
+# snapshots (e.g. gpt-4o-mini-2024-07-18) resolve to their family price.
+
+as_of: "2026-10-31"
+currency: USD
+
+models:
+  # --- Anthropic (first-party API rates) ---
+  claude-fable-5-1:  {provider: anthropic, input: 10.00, output: 50.00, cache_read: 0.25, cache_write: 12.50}
+  claude-opus-5-5:   {provider: anthropic, input: 4.00,  output: 20.00, cache_read: 0.20, cache_write: 5.00}
+  claude-opus-5:     {provider: anthropic, input: 5.00,  output: 25.00, cache_read: 0.50, cache_write: 6.25}
+  claude-opus-4-8:   {provider: anthropic, input: 5.00,  output: 25.00, cache_read: 0.50, cache_write: 6.25}
+  claude-sonnet-5-5: {provider: anthropic, input: 2.00,  output: 10.00, cache_read: 0.20, cache_write: 2.50}
+  claude-sonnet-5:   {provider: anthropic, input: 2.00,  output: 10.00, cache_read: 0.20, cache_write: 2.50}
+  claude-sonnet-4-6: {provider: anthropic, input: 3.00,  output: 15.00, cache_read: 0.30, cache_write: 3.75}
+  claude-haiku-5-5:  {provider: anthropic, input: 0.10,  output: 0.50,  cache_read: 0.01, cache_write: 0.125}
+  claude-haiku-4-5:  {provider: anthropic, input: 1.00,  output: 5.00,  cache_read: 0.10, cache_write: 1.25}
+
+  # --- OpenAI (cached input is billed at cache_read; no cache write fee) ---
+  gpt-5:             {provider: openai, input: 1.25, output: 10.00, cache_read: 0.125, cache_write: 0}
+  gpt-5-mini:        {provider: openai, input: 0.25, output: 2.00,  cache_read: 0.025, cache_write: 0}
+  gpt-4.1-mini:      {provider: openai, input: 0.40, output: 1.60,  cache_read: 0.10,  cache_write: 0}
+  gpt-4o-mini:       {provider: openai, input: 0.15, output: 0.60,  cache_read: 0.075, cache_write: 0}
+  text-embedding-3-small: {provider: openai, input: 0.02, output: 0, cache_read: 0, cache_write: 0}

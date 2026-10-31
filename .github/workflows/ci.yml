@@ -1,0 +1,99 @@
+# =============================================================================
+# LLMOps Platform — CI
+#
+#   1. quality  lint, unit tests, dashboards-as-code in sync
+#   2. e2e      builds the image, starts the whole stack against the mock
+#               provider (no API keys, no cost), runs the agent suite through
+#               the gateway with the quality/cost gate, and executes every
+#               Grafana dashboard query.
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: '3.13'
+
+jobs:
+  quality:
+    name: Lint, unit tests, dashboards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Unit tests
+        run: python -m pytest -v
+
+      - name: Dashboards are generated from tools/build_dashboards.py
+        run: python tools/build_dashboards.py --check
+
+  e2e:
+    name: End-to-end (mock provider)
+    needs: quality
+    runs-on: ubuntu-latest
+    env:
+      COMPOSE: docker compose -f docker-compose.yml -f docker-compose.mock.yml
+      GIT_COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Writable results dir for the agent container (uid 10001)
+        run: mkdir -p results && chmod 777 results
+
+      - name: Start the stack
+        run: |
+          export BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          $COMPOSE up -d --build --wait --wait-timeout 180
+
+      - name: Gateway reports the build under test
+        run: |
+          curl -sf http://localhost:8090/version | tee version.json
+          python -c "import json; v = json.load(open('version.json')); assert v['commit'] == '${GIT_COMMIT}', v"
+
+      - name: Agent suite through the gateway (quality + cost gate)
+        run: $COMPOSE run --rm agent --gate
+
+      - name: Guardrails stop a looping agent
+        run: $COMPOSE run --rm agent --ask "LOOP until stopped" | tee loop.txt && grep -q "killed, loop_detected" loop.txt
+
+      - name: Every dashboard query runs against the data
+        run: |
+          for i in $(seq 1 30); do curl -sf http://localhost:3000/api/health && break; sleep 2; done
+          python tools/check_dashboards.py --require-data
+
+      - name: Logs on failure
+        if: failure()
+        run: $COMPOSE logs --tail 200
+
+      - name: Stop the stack
+        if: always()
+        run: $COMPOSE down -v

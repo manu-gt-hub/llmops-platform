@@ -1,0 +1,17 @@
+[project]
+name = "llmops-platform"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff.lint.per-file-ignores]
+# Long SQL / PromQL strings read better unbroken.
+"tools/build_dashboards.py" = ["E501"]

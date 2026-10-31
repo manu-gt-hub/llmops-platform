@@ -1,0 +1,144 @@
+# Grafana-managed alert rules, provisioned as code. They evaluate real
+# traffic only (synthetic demo data never alerts). Runbook: doc/runbook.md
+# No contact point is configured locally: firing alerts show under
+# Alerting → Alert rules. In production, add a contact point (Slack, PagerDuty).
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: finops
+    folder: LLMOps
+    interval: 5m
+    rules:
+      - uid: llmops-budget-threshold
+        title: Project budget above alert threshold
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: llmops-postgres
+            model:
+              refId: A
+              format: table
+              rawQuery: true
+              editorMode: code
+              rawSql: >-
+                SELECT r.project, SUM(r.cost_usd) / MAX(COALESCE(b.monthly_usd, d.monthly_usd) * COALESCE(b.alert_at, d.alert_at)) AS ratio
+                FROM llm_requests r LEFT JOIN budgets b ON b.project = r.project
+                CROSS JOIN (SELECT monthly_usd, alert_at FROM budgets WHERE project = 'default') d
+                WHERE NOT r.synthetic AND r.ts >= date_trunc('month', now()) GROUP BY 1
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [1]}
+        noDataState: OK
+        execErrState: Error
+        for: 0m
+        labels: {severity: warning, team: finops}
+        annotations:
+          summary: "Project {{ $labels.project }} passed its budget alert threshold"
+          runbook_url: doc/runbook.md#budget-threshold
+
+      - uid: llmops-unpriced-model
+        title: Requests for a model missing in pricing.yaml
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: llmops-postgres
+            model:
+              refId: A
+              format: table
+              rawQuery: true
+              editorMode: code
+              rawSql: >-
+                SELECT model, COUNT(*)::float AS requests FROM llm_requests
+                WHERE NOT priced AND NOT synthetic AND ts >= now() - interval '1 hour' GROUP BY 1
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+        noDataState: OK
+        execErrState: Error
+        for: 0m
+        labels: {severity: warning, team: finops}
+        annotations:
+          summary: "Model {{ $labels.model }} has no price: its spend is recorded as $0"
+          runbook_url: doc/runbook.md#unpriced-model
+
+  - orgId: 1
+    name: reliability
+    folder: LLMOps
+    interval: 1m
+    rules:
+      - uid: llmops-gateway-error-rate
+        title: Gateway error rate above 5%
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: llmops-postgres
+            model:
+              refId: A
+              format: table
+              rawQuery: true
+              editorMode: code
+              rawSql: >-
+                SELECT provider, AVG((status_code >= 400)::int)::float AS error_rate FROM llm_requests
+                WHERE NOT synthetic AND ts >= now() - interval '15 minutes'
+                GROUP BY 1 HAVING COUNT(*) >= 10
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0.05]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels: {severity: critical, team: platform}
+        annotations:
+          summary: "{{ $labels.provider }} calls are failing (> 5% in 15 min)"
+          runbook_url: doc/runbook.md#gateway-error-rate
+
+      - uid: llmops-agent-success-rate
+        title: Agent success rate below 70%
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 86400, to: 0}
+            datasourceUid: llmops-postgres
+            model:
+              refId: A
+              format: table
+              rawQuery: true
+              editorMode: code
+              rawSql: >-
+                SELECT agent, AVG((status = 'success')::int)::float AS success_rate FROM agent_runs
+                WHERE NOT synthetic AND status <> 'running' AND started_at >= now() - interval '24 hours'
+                GROUP BY 1 HAVING COUNT(*) >= 5
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [0.7]}
+        noDataState: OK
+        execErrState: Error
+        for: 0m
+        labels: {severity: warning, team: agentops}
+        annotations:
+          summary: "Agent {{ $labels.agent }} succeeded in less than 70% of its runs (24 h)"
+          runbook_url: doc/runbook.md#agent-success-rate
