@@ -117,6 +117,13 @@
       "keepTime": true
     },
     {
+      "title": "Agent console",
+      "type": "link",
+      "url": "http://localhost:8090/console",
+      "targetBlank": true,
+      "icon": "external link"
+    },
+    {
       "title": "Architecture",
       "type": "link",
       "url": "http://localhost:8090/architecture",
@@ -972,6 +979,418 @@
       }
     },
     {
+      "type": "row",
+      "title": "Governance — judge and guardrails",
+      "collapsed": false,
+      "panels": [],
+      "id": 12,
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Judge score",
+      "description": "LLM-as-judge: mean of on-purpose, grounded and helpful, scaled 0-1",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT AVG(score) FROM judgements WHERE $__timeFilter(ts) AND ('$source' = 'all' OR synthetic = ('$source' = 'demo'))",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "red"
+              },
+              {
+                "value": 0.7,
+                "color": "green"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 13,
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Judge / human agreement",
+      "description": "How often the judge agrees with the labels given in the console",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT AVG(((score >= 0.7) = (human_label = 'good'))::int) FROM judgements WHERE human_label IS NOT NULL AND $__timeFilter(ts) AND ('$source' = 'all' OR synthetic = ('$source' = 'demo'))",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "red"
+              },
+              {
+                "value": 0.8,
+                "color": "green"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 14,
+      "gridPos": {
+        "x": 4,
+        "y": 31,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Blocked by guardrails",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT COUNT(*) FROM guardrail_events WHERE action = 'blocked' AND $__timeFilter(ts) AND ('$source' = 'all' OR synthetic = ('$source' = 'demo'))",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": null,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 15,
+      "gridPos": {
+        "x": 8,
+        "y": 31,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Flagged (monitor mode)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT COUNT(*) FROM guardrail_events WHERE action = 'flagged' AND $__timeFilter(ts) AND ('$source' = 'all' OR synthetic = ('$source' = 'demo'))",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": null,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 16,
+      "gridPos": {
+        "x": 12,
+        "y": 31,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "text",
+      "title": "Govern the agents",
+      "options": {
+        "mode": "markdown",
+        "content": "Pause an agent, switch its guardrails between **monitor** and\n**enforce**, review flagged runs and chat with it in the\n**[agent console](http://localhost:8090/console)**. Charters: `config/agents.yaml`."
+      },
+      "id": 17,
+      "gridPos": {
+        "x": 16,
+        "y": 31,
+        "w": 8,
+        "h": 4
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Judge grades per day",
+      "description": "1-5 per criterion",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT $__timeGroupAlias(ts, '1d', 0), AVG(on_purpose) AS \"on purpose\", AVG(grounded) AS \"grounded\", AVG(helpful) AS \"helpful\" FROM judgements WHERE $__timeFilter(ts) AND ('$source' = 'all' OR synthetic = ('$source' = 'demo')) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "spanNulls": true,
+            "pointSize": 4,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisSoftMin": 0
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 18,
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Guardrail events per day by rule",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "llmops-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "llmops-postgres"
+          },
+          "rawSql": "SELECT $__timeGroupAlias(ts, '1d', 0), rule AS metric, COUNT(*) AS value FROM guardrail_events WHERE $__timeFilter(ts) AND ('$source' = 'all' OR synthetic = ('$source' = 'demo')) GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": null,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 2,
+            "fillOpacity": 80,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "spanNulls": true,
+            "pointSize": 4,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "axisSoftMin": 0
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 19,
+      "gridPos": {
+        "x": 12,
+        "y": 35,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
       "type": "table",
       "title": "Agent traces (Tempo)",
       "datasource": {
@@ -999,10 +1418,10 @@
       "options": {
         "showHeader": true
       },
-      "id": 12,
+      "id": 20,
       "gridPos": {
         "x": 0,
-        "y": 30,
+        "y": 43,
         "w": 24,
         "h": 8
       }

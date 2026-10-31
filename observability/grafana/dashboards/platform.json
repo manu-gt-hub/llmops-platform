@@ -117,6 +117,13 @@
       "keepTime": true
     },
     {
+      "title": "Agent console",
+      "type": "link",
+      "url": "http://localhost:8090/console",
+      "targetBlank": true,
+      "icon": "external link"
+    },
+    {
       "title": "Architecture",
       "type": "link",
       "url": "http://localhost:8090/architecture",

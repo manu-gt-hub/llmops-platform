@@ -18,8 +18,9 @@ from fastapi.responses import HTMLResponse, Response
 from opentelemetry import trace
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
-from gateway import config, db, seed
+from gateway import config, db, governance, seed
 from gateway.budgets import Budgets
+from gateway.console import router as console_router
 from gateway.pricing import PriceList
 from gateway.proxy import Attribution, Proxy
 from gateway.runs import router as runs_router
@@ -48,6 +49,7 @@ async def lifespan(app: FastAPI):
     await db.apply_schema()
     budgets = Budgets.load(config.BUDGETS_FILE)
     await db.sync_budgets(budgets)
+    await governance.sync_registry(governance.load_registry(config.AGENTS_FILE))
     if await db.record_deployment():
         log.info("new release recorded: %s (%s)", config.APP_VERSION, config.GIT_COMMIT)
     if config.SEED_DEMO_DATA:
@@ -76,6 +78,7 @@ app = FastAPI(
     },
 )
 app.include_router(runs_router)
+app.include_router(console_router)
 
 
 # ---------------------------------------------------------------------------

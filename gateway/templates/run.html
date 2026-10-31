@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_pill, score %}
+{% block title %}{{ run.run_id }} · Agent console{% endblock %}
+{% block content %}
+<p class="small"><a href="/console/agents/{{ run.agent }}">← {{ run.agent }}</a></p>
+<h1>Run {{ run.run_id }} {{ status_pill(run.status) }}
+  {% if run.synthetic %}<span class="pill muted">demo</span>{% endif %}</h1>
+<p class="muted small">{{ run.started_at.strftime("%Y-%m-%d %H:%M:%S") }} · {{ run.model }} ·
+  {{ run.steps }} steps · {{ run.total_tokens }} tokens · ${{ '%.4f' % run.cost_usd }} ·
+  stop reason: {{ run.stop_reason or "—" }} · release {{ run.release or "—" }}
+  {% if run.trace_id and not run.synthetic %} · trace <code>{{ run.trace_id }}</code>{% endif %}</p>
+
+<div class="card">
+  <p><strong>Question</strong></p>
+  <pre>{{ run.question or "(not recorded)" }}</pre>
+  <p><strong>Answer</strong></p>
+  <pre>{{ run.answer or "(no answer)" }}</pre>
+</div>
+
+<h2>Judge</h2>
+{% if judgement %}
+<div class="card">
+  <div class="grid">
+    <div><div class="muted small">Score</div><div class="stat">{{ score(judgement.score) }}</div></div>
+    <div><div class="muted small">On purpose</div><div class="stat">{{ judgement.on_purpose }}/5</div></div>
+    <div><div class="muted small">Grounded</div><div class="stat">{{ judgement.grounded }}/5</div></div>
+    <div><div class="muted small">Helpful</div><div class="stat">{{ judgement.helpful }}/5</div></div>
+  </div>
+  <p>{{ judgement.reasoning }}</p>
+  <p class="small muted">Judged by {{ judgement.judge_model }}.
+    {% if judgement.human_label %}Human label: <strong>{{ judgement.human_label }}</strong>.{% endif %}</p>
+  <form method="post" action="/console/runs/{{ run.run_id }}/label">
+    Is this run good? <button name="value" value="good">👍 Good</button>
+    <button name="value" value="bad">👎 Bad</button>
+  </form>
+</div>
+{% else %}
+<p class="muted">Not judged (not sampled, no answer, no provider key, or the judge is still running — reload in a few seconds).</p>
+{% endif %}
+
+{% if events %}
+<h2>Guardrail events</h2>
+<div class="table-wrap"><table>
+  <tr><th>Stage</th><th>Rule</th><th>Action</th><th>Detail</th></tr>
+  {% for e in events %}
+  <tr><td>{{ e.stage }}</td><td>{{ e.rule }}</td><td>{{ status_pill(e.action) }}</td><td class="small">{{ e.detail }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+<h2>Steps</h2>
+<div class="table-wrap"><table>
+  <tr><th>#</th><th>Kind</th><th>Name</th><th>OK</th><th>ms</th><th>Detail / output</th></tr>
+  {% for s in steps %}
+  <tr>
+    <td>{{ s.step }}</td><td>{{ s.kind }}</td><td>{{ s.name }}</td>
+    <td>{% if s.ok %}<span class="ok">✓</span>{% else %}<span class="bad">✗</span>{% endif %}</td>
+    <td>{{ s.latency_ms }}</td>
+    <td>{% if s.detail %}<pre>{{ s.detail }}</pre>{% endif %}
+        {% if s.output %}<details><summary class="small">tool output</summary><pre>{{ s.output }}</pre></details>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

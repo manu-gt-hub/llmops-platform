@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_pill, score, pct %}
+{% block title %}{{ agent.name }} · Agent console{% endblock %}
+{% block content %}
+<p class="small"><a href="/console">← Agents</a></p>
+<h1>{{ agent.name }} {{ status_pill(agent.status) }}</h1>
+
+<div class="card">
+  <p><strong>Purpose.</strong> {{ agent.purpose }}</p>
+  <p class="small">Allowed models: {{ agent.models | join(", ") }}<br>
+    Allowed tools: {{ (agent.tools | join(", ")) or "none" }}<br>
+    Guardrails: <strong>{{ agent.guardrail_mode }}</strong> · Judge samples {{ pct(agent.judge_sample_rate) }} of runs ·
+    Owner: {{ agent.owner or "—" }}</p>
+</div>
+
+<h2>Recent runs</h2>
+<div class="table-wrap"><table>
+  <tr><th>Started</th><th>Run</th><th>Task</th><th>Status</th><th>Stop reason</th><th>Steps</th><th>Cost</th><th>Judge</th></tr>
+  {% for r in runs %}
+  <tr>
+    <td class="small">{{ r.started_at.strftime("%m-%d %H:%M") }}</td>
+    <td><a href="/console/runs/{{ r.run_id }}">{{ r.run_id }}</a>{% if r.synthetic %} <span class="pill muted">demo</span>{% endif %}</td>
+    <td>{{ r.task_id or "—" }}</td>
+    <td>{{ status_pill(r.status) }}</td>
+    <td class="small">{{ r.stop_reason or "" }}</td>
+    <td>{{ r.steps }}</td>
+    <td>${{ '%.4f' % r.cost_usd }}</td>
+    <td>{{ score(r.judge_score) }}</td>
+  </tr>
+  {% else %}<tr><td colspan="8" class="muted">No runs yet.</td></tr>{% endfor %}
+</table></div>
+
+<h2>Guardrail events</h2>
+<div class="table-wrap"><table>
+  <tr><th>When</th><th>Stage</th><th>Rule</th><th>Action</th><th>Detail</th><th>Run</th></tr>
+  {% for e in events %}
+  <tr>
+    <td class="small">{{ e.ts.strftime("%m-%d %H:%M") }}</td>
+    <td>{{ e.stage }}</td><td>{{ e.rule }}</td><td>{{ status_pill(e.action) }}</td>
+    <td class="small">{{ e.detail or "" }}</td>
+    <td class="small">{% if e.run_id %}<a href="/console/runs/{{ e.run_id }}">{{ e.run_id }}</a>{% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="muted">No guardrail events.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

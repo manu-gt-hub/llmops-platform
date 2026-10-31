@@ -1,0 +1,15 @@
+{# Shared helpers, imported by the pages. #}
+{% macro status_pill(status) -%}
+  {%- set cls = {"active": "ok", "success": "ok", "paused": "warn", "failed": "warn",
+                 "killed": "bad", "error": "bad", "blocked": "bad", "flagged": "warn"}.get(status, "muted") -%}
+  <span class="pill {{ cls }}">{{ status }}</span>
+{%- endmacro %}
+
+{% macro score(value) -%}
+  {%- if value is none %}<span class="muted">—</span>
+  {%- else %}<span class="{{ 'ok' if value >= PASS_SCORE else 'bad' }}">{{ '%.2f' % value }}</span>{% endif -%}
+{%- endmacro %}
+
+{% macro pct(value) -%}
+  {%- if value is none %}<span class="muted">—</span>{% else %}{{ '%.0f' % (value * 100) }}%{% endif -%}
+{%- endmacro %}

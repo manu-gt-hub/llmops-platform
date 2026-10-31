@@ -117,6 +117,13 @@
       "keepTime": true
     },
     {
+      "title": "Agent console",
+      "type": "link",
+      "url": "http://localhost:8090/console",
+      "targetBlank": true,
+      "icon": "external link"
+    },
+    {
       "title": "Architecture",
       "type": "link",
       "url": "http://localhost:8090/architecture",
@@ -762,7 +769,7 @@
       "title": "About this platform",
       "options": {
         "mode": "markdown",
-        "content": "\n**LLMOps Platform** — every LLM call goes through the gateway, which records tokens, cost and latency,\nenforces budgets and traces agent runs.\n\n| Dashboard | What it answers |\n|---|---|\n| **FinOps** | Where does the money go? Cost per model / project / successful run, cache savings, forecast |\n| **AgentOps** | Do the agents work? Success rate, steps, loops, tool errors, eval scores, traces |\n| **Platform** | What is deployed and is it healthy? Releases, throughput, latency, errors |\n\n📐 [Architecture](http://localhost:8090/architecture) · 🔌 [Gateway API](http://localhost:8090/docs) ·\n📈 [Prometheus](http://localhost:9090) · Use the **Data** selector to switch between real and demo data.\n"
+        "content": "\n**LLMOps Platform** — every LLM call goes through the gateway, which records tokens, cost and latency,\nenforces budgets and each agent's charter and guardrails, and traces agent runs. A judge grades the runs.\n\n| Dashboard | What it answers |\n|---|---|\n| **FinOps** | Where does the money go? Cost per model / project / successful run, cache savings, forecast |\n| **AgentOps** | Do the agents work? Success rate, steps, loops, tool errors, eval scores, traces |\n| **Platform** | What is deployed and is it healthy? Releases, throughput, latency, errors |\n\n🛡️ [Agent console](http://localhost:8090/console) · 📐 [Architecture](http://localhost:8090/architecture) · 🔌 [Gateway API](http://localhost:8090/docs) ·\n📈 [Prometheus](http://localhost:9090) · Use the **Data** selector to switch between real and demo data.\n"
       },
       "id": 11,
       "gridPos": {

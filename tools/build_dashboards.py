@@ -215,6 +215,8 @@ def dashboard(uid: str, title: str, layout: Layout, description: str, time_from:
         "links": [
             {"title": "LLMOps", "type": "dashboards", "tags": ["llmops"], "asDropdown": False,
              "includeVars": True, "keepTime": True},
+            {"title": "Agent console", "type": "link", "url": "http://localhost:8090/console",
+             "targetBlank": True, "icon": "external link"},
             {"title": "Architecture", "type": "link", "url": "http://localhost:8090/architecture",
              "targetBlank": True, "icon": "doc"},
         ],
@@ -275,7 +277,7 @@ def overview() -> dict:
 
     lay.add(text("About this platform", """
 **LLMOps Platform** — every LLM call goes through the gateway, which records tokens, cost and latency,
-enforces budgets and traces agent runs.
+enforces budgets and each agent's charter and guardrails, and traces agent runs. A judge grades the runs.
 
 | Dashboard | What it answers |
 |---|---|
@@ -283,7 +285,7 @@ enforces budgets and traces agent runs.
 | **AgentOps** | Do the agents work? Success rate, steps, loops, tool errors, eval scores, traces |
 | **Platform** | What is deployed and is it healthy? Releases, throughput, latency, errors |
 
-📐 [Architecture](http://localhost:8090/architecture) · 🔌 [Gateway API](http://localhost:8090/docs) ·
+🛡️ [Agent console](http://localhost:8090/console) · 📐 [Architecture](http://localhost:8090/architecture) · 🔌 [Gateway API](http://localhost:8090/docs) ·
 📈 [Prometheus](http://localhost:9090) · Use the **Data** selector to switch between real and demo data.
 """), 24, 6)
     return dashboard("llmops-overview", "LLMOps — Overview", lay,
@@ -413,6 +415,30 @@ def agentops() -> dict:
                  overrides=[unit_override("cost", "currencyUSD", 4),
                             link_override("trace", "Open trace in Tempo", tempo_trace_url())],
                  description="Real runs carry a trace id: click it to open the trace"), 24, 10)
+
+    lay.row("Governance — judge and guardrails")
+    lay.add(stat("Judge score", [sql(f"""SELECT AVG(score) FROM judgements
+                 WHERE $__timeFilter(ts) AND {SRC}""", "table")], unit="percentunit", decimals=0,
+                 thresholds=[(None, "red"), (0.7, "green")],
+                 description="LLM-as-judge: mean of on-purpose, grounded and helpful, scaled 0-1"), 4, 4)
+    lay.add(stat("Judge / human agreement", [sql(f"""SELECT AVG(((score >= 0.7) = (human_label = 'good'))::int)
+                 FROM judgements WHERE human_label IS NOT NULL AND $__timeFilter(ts) AND {SRC}""", "table")],
+                 unit="percentunit", decimals=0, thresholds=[(None, "red"), (0.8, "green")],
+                 description="How often the judge agrees with the labels given in the console"), 4, 4)
+    lay.add(stat("Blocked by guardrails", [sql(f"""SELECT COUNT(*) FROM guardrail_events
+                 WHERE action = 'blocked' AND $__timeFilter(ts) AND {SRC}""", "table")], unit="short"), 4, 4)
+    lay.add(stat("Flagged (monitor mode)", [sql(f"""SELECT COUNT(*) FROM guardrail_events
+                 WHERE action = 'flagged' AND $__timeFilter(ts) AND {SRC}""", "table")], unit="short"), 4, 4)
+    lay.add(text("Govern the agents", """Pause an agent, switch its guardrails between **monitor** and
+**enforce**, review flagged runs and chat with it in the
+**[agent console](http://localhost:8090/console)**. Charters: `config/agents.yaml`."""), 8, 4)
+    lay.add(timeseries("Judge grades per day", [sql(f"""SELECT $__timeGroupAlias(ts, '1d', 0),
+                 AVG(on_purpose) AS "on purpose", AVG(grounded) AS "grounded", AVG(helpful) AS "helpful"
+                 FROM judgements WHERE $__timeFilter(ts) AND {SRC} GROUP BY 1 ORDER BY 1""")],
+                 decimals=1, description="1-5 per criterion"), 12, 8)
+    lay.add(timeseries("Guardrail events per day by rule", [sql(f"""SELECT $__timeGroupAlias(ts, '1d', 0),
+                 rule AS metric, COUNT(*) AS value FROM guardrail_events WHERE $__timeFilter(ts) AND {SRC}
+                 GROUP BY 1, 2 ORDER BY 1""")], stacked=True, bars=True), 12, 8)
 
     traces = {"refId": "A", "datasource": TEMPO, "queryType": "traceql", "limit": 20, "tableType": "traces",
               "query": '{ span.gen_ai.operation.name = "invoke_agent" }'}

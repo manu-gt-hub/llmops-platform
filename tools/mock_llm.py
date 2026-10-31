@@ -10,7 +10,8 @@ The mock behaves like a well-behaved tool-using model:
   turn 3  answers with the expected value from agent/tasks.json
 
 A question containing "LOOP" makes it call the same tool forever, to
-exercise the loop guardrail. Streaming (SSE) is supported for both APIs.
+exercise the loop guardrail. A request without tools is taken as the judge
+and gets a JSON verdict. Streaming (SSE) is supported for both APIs.
 
   uvicorn tools.mock_llm:app --port 9000
 """
@@ -35,6 +36,13 @@ def _answer(question: str) -> str:
                 return f"According to the handbook, the answer is {task['expected_number']}."
             return f"According to the handbook, the answer is {' '.join(task['expected_keywords'])}."
     return "The handbook does not contain that information."
+
+
+def _verdict(prompt: str) -> str:
+    """Judge requests: a plausible verdict, worse when the agent had no answer."""
+    unhelpful = "does not contain" in prompt or "(no answer)" in prompt
+    return json.dumps({"on_purpose": 5, "grounded": 4, "helpful": 2 if unhelpful else 5,
+                       "reasoning": "Mock judge: grades derived from the answer text."})
 
 
 def _plan(question: str, tool_turns: int) -> tuple[str, dict] | str:
@@ -64,7 +72,7 @@ async def messages(request: Request):
     first = msgs[0]["content"] if msgs else ""
     question = first if isinstance(first, str) else " ".join(b.get("text", "") for b in first)
     tool_turns = sum(1 for m in msgs if m["role"] == "assistant")
-    action = _plan(question, tool_turns)
+    action = _plan(question, tool_turns) if body.get("tools") else _verdict(question)
     cached = 1000 if tool_turns else 0
     usage = {"input_tokens": USAGE["input"] - cached + 200 * tool_turns, "output_tokens": USAGE["output"],
              "cache_read_input_tokens": cached, "cache_creation_input_tokens": 0 if tool_turns else 1000}
@@ -99,7 +107,7 @@ async def chat_completions(request: Request):
     msgs = body.get("messages", [])
     question = next((m["content"] for m in msgs if m["role"] == "user"), "")
     tool_turns = sum(1 for m in msgs if m["role"] == "assistant")
-    action = _plan(question, tool_turns)
+    action = _plan(question, tool_turns) if body.get("tools") else _verdict(question)
     usage = {"prompt_tokens": USAGE["input"] + 200 * tool_turns, "completion_tokens": USAGE["output"],
              "total_tokens": USAGE["input"] + USAGE["output"] + 200 * tool_turns,
              "prompt_tokens_details": {"cached_tokens": 1024 if tool_turns else 0}}
