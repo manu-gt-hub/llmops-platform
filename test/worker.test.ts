@@ -174,7 +174,7 @@ describe("admin", () => {
     expect((await admin(fake, "/admin", { headers: { Authorization: basic("wrong") } })).status).toBe(401);
     const ok = await admin(fake, "/admin", { headers: { Authorization: basic("s3cret") } });
     expect(ok.status).toBe(200);
-    expect(await ok.text()).toContain("Free Workers AI allocation used");
+    expect(await ok.text()).toContain("Free allocation used by this platform");
   });
 
   it("pauses an agent from a same-origin form, and refuses cross-site posts", async () => {
@@ -234,7 +234,7 @@ describe("public dashboard", () => {
     const resp = await admin(fake, "/dashboard"); // no Authorization header
     expect(resp.status).toBe(200);
     const html = await resp.text();
-    expect(html).toContain("Free Workers AI allocation used");
+    expect(html).toContain("Free allocation used by this platform");
     expect(html).toContain("task-07");
     expect(html).toContain("✓ pass");
     expect(html).not.toContain("PRIVATE-QUESTION");
@@ -250,6 +250,16 @@ describe("public dashboard", () => {
     const browser = await (await admin(fake, "/dashboard", { headers: { "Accept-Language": "es-ES,es;q=0.9" } })).text();
     expect(browser).toContain("Uso a precio de lista");
     expect(await (await admin(fake, "/dashboard")).text()).toContain("Billed today");
+  });
+
+  it("explains every card, chart and table with a tooltip, in both languages", async () => {
+    const fake = fakeEnv(scriptedModel());
+    const en = await (await admin(fake, "/dashboard")).text();
+    const es = await (await admin(fake, "/dashboard?lang=es")).text();
+    expect(en.match(/class="tip"/g)).toHaveLength(19);
+    expect(es.match(/class="tip"/g)).toHaveLength(19);
+    expect(en).toContain("shared with its other Workers");
+    expect(es).toContain("se comparte con sus otros Workers");
   });
 
   it("bills nothing within the free allocation, and only the excess beyond it", async () => {
