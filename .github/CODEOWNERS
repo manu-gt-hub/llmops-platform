@@ -1,18 +1,19 @@
 # Code owners are requested for review automatically on every pull request.
 # Later, more specific rules take precedence over earlier ones.
-# Docs: https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 
 # Default owner for everything
 *                       @manu-gt-hub
 
-# Money: prices, budgets and the cost/quality gate
+# Money and rules: prices, budgets, charters, the eval gate
 /config/                @manu-gt-hub
-/evals/                 @manu-gt-hub
+/evaluation/            @manu-gt-hub
+/src/governance.ts      @manu-gt-hub
+/src/security.ts        @manu-gt-hub
 
-# CI/CD and release process
+# CI/CD, deployment and infrastructure config
 /.github/               @manu-gt-hub
-/Dockerfile             @manu-gt-hub
-/docker-compose*.yml    @manu-gt-hub
+/wrangler.jsonc         @manu-gt-hub
+/migrations/            @manu-gt-hub
 
 # Architecture decisions
 /doc/adr/               @manu-gt-hub

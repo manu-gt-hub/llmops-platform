@@ -1,0 +1,5 @@
+{
+  "_comment": "Quality and cost gate of the live evaluation (npm run evaluate -- --strict). Raise max_avg_cost_usd in the same PR as a change that is meant to cost more (e.g. switching to a paid provider).",
+  "min_pass_rate": 0.75,
+  "max_avg_cost_usd": 0.002
+}
