@@ -15,7 +15,7 @@ const TEXTS = {
     dashboardTitle: "LLMOps — live dashboard",
     dashboardIntro:
       "A live LLM agent on Cloudflare's free tier, with the operations around it: cost per call and budgets (FinOps), " +
-      "an eval suite that gates every deploy plus an LLM judge (scoring), charter and content guardrails, CI/CD and " +
+      "an eval suite that checks every release live plus an LLM judge (scoring), charter and content guardrails, CI/CD and " +
       "security checks. Everything below is computed live from the platform's own ledger.",
     askAgent: "Ask the agent", source: "Source code", architecture: "Architecture",
     readOnly: "Read-only view. Run details, human review and the agent switches are in the password-protected admin.",
@@ -32,7 +32,7 @@ const TEXTS = {
     releases: "Releases", deployed: "Deployed (UTC)", version: "Version", commit: "Commit", noReleases: "No deployments recorded.",
     agents: "Agents", agent: "Agent", status: "Status", guardrailMode: "Guardrails", budgetToday: "Budget used today",
     actions: "Actions", purpose: "Purpose", of: "of",
-    evalByRelease: "Live evaluation by release", evalNote: "the deploy gate: fixed questions, deterministic grading",
+    evalByRelease: "Live evaluation by release", evalNote: "run after every deploy: fixed questions, deterministic grading; a failure flags the release for rollback",
     evalRuns: "Eval runs", passRate: "Pass rate", avgPerTask: "Avg value per task", noEval: "No evaluation runs yet.",
     latestEval: "Latest evaluation runs", when: "When (UTC)", task: "Task", question: "Question", result: "Result",
     cost: "Value", pass: "✓ pass", fail: "✗ fail",
@@ -46,7 +46,7 @@ const TEXTS = {
     dashboardTitle: "LLMOps — panel en directo",
     dashboardIntro:
       "Un agente LLM en producción en el plan gratuito de Cloudflare, con las operaciones a su alrededor: coste por llamada " +
-      "y presupuestos (FinOps), una batería de evaluación que valida cada despliegue y un juez LLM (scoring), contrato y " +
+      "y presupuestos (FinOps), una batería de evaluación que comprueba cada release en directo y un juez LLM (scoring), contrato y " +
       "guardrails de contenido, CI/CD y controles de seguridad. Todo lo que ves se calcula en directo a partir del registro " +
       "de la propia plataforma.",
     askAgent: "Pregunta al agente", source: "Código fuente", architecture: "Arquitectura",
@@ -64,7 +64,7 @@ const TEXTS = {
     releases: "Releases", deployed: "Desplegado (UTC)", version: "Versión", commit: "Commit", noReleases: "No hay despliegues registrados.",
     agents: "Agentes", agent: "Agente", status: "Estado", guardrailMode: "Guardrails", budgetToday: "Presupuesto usado hoy",
     actions: "Acciones", purpose: "Propósito", of: "de",
-    evalByRelease: "Evaluación en directo por release", evalNote: "la validación del despliegue: preguntas fijas, corrección determinista",
+    evalByRelease: "Evaluación en directo por release", evalNote: "se ejecuta tras cada despliegue: preguntas fijas, corrección determinista; si falla, la release se marca para rollback",
     evalRuns: "Ejecuciones", passRate: "Aciertos", avgPerTask: "Valor medio por tarea", noEval: "Aún no hay evaluaciones.",
     latestEval: "Últimas evaluaciones", when: "Cuándo (UTC)", task: "Tarea", question: "Pregunta", result: "Resultado",
     cost: "Valor", pass: "✓ acierto", fail: "✗ fallo",
