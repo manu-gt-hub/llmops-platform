@@ -1,0 +1,56 @@
+{
+  // Cloudflare Worker: public chat + research agent + admin dashboard.
+  // See README.md and doc/architecture.md
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "llmops-platform",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    // Chat UI. Security headers for these files: public/_headers
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "ai": {
+    // Workers AI and AI Gateway always run remotely, also in wrangler dev
+    "binding": "AI",
+    "remote": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "llmops",
+      // Written by `npm run setup` (the deploy workflow runs it too)
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // 10 questions per minute per IP: protects the free daily AI allocation
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 10, "period": 60 }
+    }
+  ],
+  "vars": {
+    // "workers-ai" (free) | "anthropic" | "openai" (need the matching secret)
+    "LLM_PROVIDER": "workers-ai",
+    "WORKERS_AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "ANTHROPIC_MODEL": "claude-opus-5-5",
+    "OPENAI_MODEL": "gpt-4o-mini",
+    // The judge always runs on Workers AI (free, and a different model family
+    // from the agent when the agent uses a paid provider)
+    "JUDGE_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    // AI Gateway: "default" is created automatically on first use
+    "AI_GATEWAY_ID": "default",
+    // Overwritten on deploy: --var APP_VERSION:... --var GIT_COMMIT:...
+    "APP_VERSION": "dev",
+    "GIT_COMMIT": "local"
+  },
+  // Secrets (wrangler secret put ...): ADMIN_TOKEN, and only for paid
+  // providers ANTHROPIC_API_KEY / OPENAI_API_KEY (+ CF_AIG_TOKEN to route them
+  // through AI Gateway)
+  "observability": {
+    "enabled": true
+  }
+}

@@ -1,0 +1,42 @@
+# Health and spend check of the live Worker every 6 hours. GitHub emails the
+# repository owner when a scheduled run fails, so this is the alerting.
+#
+# Repository variable: DEMO_URL (e.g. https://llmops-platform.<subdomain>.workers.dev)
+# Repository secret:   ADMIN_TOKEN (to read /admin/api/summary)
+name: Monitor
+
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Live health, errors, budgets, judge
+    runs-on: ubuntu-latest
+    env:
+      DEMO_URL: ${{ vars.DEMO_URL }}
+      ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+    steps:
+      - name: Check
+        run: |
+          if [ -z "$DEMO_URL" ] || [ -z "$ADMIN_TOKEN" ]; then
+            echo "::warning title=Monitor skipped::Set the DEMO_URL variable and the ADMIN_TOKEN secret."
+            exit 0
+          fi
+          curl -fsS --retry 3 --retry-delay 10 "$DEMO_URL/health"
+          curl -fsS --retry 3 --retry-delay 10 -u "monitor:$ADMIN_TOKEN" "$DEMO_URL/admin/api/summary" > summary.json
+          node - <<'JS'
+          const s = require("./summary.json");
+          const problems = [];
+          if (s.today.calls >= 20 && s.today.error_rate > 0.1) problems.push(`error rate ${(s.today.error_rate * 100).toFixed(0)}% today`);
+          if (s.today.free_neurons_used > 0.8) problems.push(`${(s.today.free_neurons_used * 100).toFixed(0)}% of the free Workers AI allocation used`);
+          for (const a of s.agents) if (a.budget_used > 0.8) problems.push(`${a.name} used ${(a.budget_used * 100).toFixed(0)}% of its daily budget`);
+          if (s.judge_24h.judged >= 5 && s.judge_24h.judge_score < 0.6) problems.push(`judge score ${s.judge_24h.judge_score.toFixed(2)} in 24 h`);
+          console.log(JSON.stringify(s, null, 2));
+          if (problems.length) { console.log(`::error::${problems.join("; ")}`); process.exit(1); }
+          console.log("All good.");
+          JS

@@ -1,73 +1,50 @@
 # Runbook
 
-What to do when an alert fires. Alert rules:
-[observability/grafana/provisioning/alerting/rules.yml](../observability/grafana/provisioning/alerting/rules.yml).
-They evaluate real traffic only.
+## The monitor workflow failed
 
-## Budget threshold
+It runs every 6 hours and GitHub emails the owner when it fails. Its log says
+which check failed:
 
-*Project budget above alert threshold* — month-to-date spend passed
-`alert_at × monthly_usd` for a project.
+| Problem | What to do |
+|---|---|
+| **Error rate > 10 %** | Cloudflare dashboard → Workers → llmops-platform → Observability for the exceptions; AI Gateway → Logs for failing model calls. `quota_exceeded` means the free allocation ran out |
+| **Free allocation > 80 %** | Someone is using it a lot. `/admin` → Recent runs. Lower `daily_budget_usd` or the rate limit if it is abuse |
+| **Agent budget > 80 %** | Same as above, for one agent. Raise the budget in `config/agents.json` (reviewed PR) only if the traffic is legitimate |
+| **Judge score < 0.6** | `/admin` → Review queue: open the runs, label them. If humans disagree with the judge, the judge is wrong, not the agent |
 
-1. FinOps dashboard, filter **Project**: is it one model, one agent, or a
-   general increase? Check the *Most expensive agent runs* table.
-2. Compare with the release annotations: did a deploy change prompts, model
-   or caching?
-3. If the spend is legitimate, raise `monthly_usd` in `config/budgets.yaml`
-   (reviewed PR) and restart the gateway. If not, fix the cause; at 100 %
-   the gateway answers **402 budget_exceeded** and the project stops.
+## The live evaluation failed after a deploy
 
-## Unpriced model
+The deploy already happened. Look at the `evaluation-results` artifact of the
+run: which tasks failed and why.
 
-*Requests for a model missing in pricing.yaml* — calls are proxied, but
-their cost is recorded as $0, so the dashboards under-report spend.
+- Quality dropped because of the change → fix forward, or `npx wrangler rollback`.
+- Cost rose on purpose (e.g. a paid provider) → raise `max_avg_cost_usd`
+  in `evaluation/baseline.json` in the same PR.
+- A single different task fails each time → model variance; re-run the job.
 
-1. Add the model to `config/pricing.yaml` with its price per 1M tokens.
-2. Optionally recompute past rows:
-   `UPDATE llm_requests SET cost_usd = …, priced = true WHERE model = '<id>'`.
+## The agent misbehaves
 
-## Gateway error rate
+Stop it first, investigate after: `/admin` → Agents → **pause**. Every call
+of that agent is refused (`agent_paused`) until it is resumed. Then open its
+recent runs: steps, tool outputs and guardrail events are on each run page.
 
-*Gateway error rate above 5%* for a provider over 15 minutes.
+## Switch the model to Anthropic or OpenAI
 
-1. Platform dashboard → *Errors per day by status code* and live RPS.
-   - `429` / `529`: provider rate limit or overload. Check provider status,
-     reduce concurrency.
-   - `401` / `403`: invalid or revoked key in `.env`.
-   - `502`: the gateway cannot reach the provider (network, DNS).
-   - `402`: our own guardrails, see budget threshold.
-2. `docker compose logs gateway --tail 200`.
+```bash
+npx wrangler secret put ANTHROPIC_API_KEY      # or OPENAI_API_KEY
+npx wrangler secret put CF_AIG_TOKEN           # optional: show them in AI Gateway too
+# wrangler.jsonc: "LLM_PROVIDER": "anthropic"
+```
 
-## Agent success rate
-
-*Agent success rate below 70%* over 24 h.
-
-1. AgentOps dashboard → *Stop reasons* and *Recent runs*.
-   - `loop_detected`: the agent repeats a tool call; check the tool output
-     it receives (trace link) and the prompt.
-   - `run_cost_limit`: runs are hitting `MAX_RUN_COST_USD`; more steps or
-     bigger context than before.
-   - `refusal` / `max_tokens`: model-side; look at the trace.
-2. Did it start at a release? Run the suite on the previous version:
-   `docker compose run --rm agent --gate`.
-
-## Agent misbehaving
-
-Stop it first, investigate after: **console → Agents → ⏸ Pause**. Every call
-of that agent gets 403 until it is resumed. Then:
-
-1. Console → the agent → *Guardrail events* and *Recent runs*.
-2. A burst of `prompt_injection`: look at the run's tool outputs; a document
-   in the knowledge base may contain injected instructions.
-3. Low judge scores: open a few runs, label them; if the labels disagree with
-   the judge, the judge (or its rubric in `gateway/judge.py`) is the problem.
+Then raise `daily_budget_usd` / `max_run_cost_usd` (config/agents.json) and
+`max_avg_cost_usd` (evaluation/baseline.json): paid calls cost ~100× more.
 
 ## Useful commands
 
 ```bash
-docker compose ps                         # service health
-curl localhost:8090/version               # what is running
-curl localhost:8090/api/summary           # spend per project (real traffic)
-docker compose exec db psql -U llmops     # SQL on the ledger
-docker compose run --rm gateway python -m gateway.seed --clear   # remove demo data
+curl https://<worker>/version                                  # what is live
+curl -u admin:$ADMIN_TOKEN https://<worker>/admin/api/summary  # today's numbers
+npx wrangler tail                                              # live logs
+npx wrangler rollback                                          # previous version
+npx wrangler d1 execute llmops --remote --command "SELECT ..." # SQL on the ledger
 ```

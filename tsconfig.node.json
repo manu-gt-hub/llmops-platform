@@ -1,0 +1,8 @@
+{
+  // Scripts, evaluation and tests (run with Node)
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types", "node"]
+  },
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "evaluation/**/*.ts", "test/**/*.ts"]
+}
