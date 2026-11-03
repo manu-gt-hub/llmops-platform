@@ -7,7 +7,7 @@ team has to answer:
 | Discipline | Question | Where the answer lives |
 |---|---|---|
 | **FinOps** | What does each call, run and day cost, and can it overspend? | `llm_calls` (D1), budgets in `config/agents.json`, AI Gateway analytics, `/admin` |
-| **Scoring** | Are the answers right, and how do we know? | Deterministic eval suite (deploy gate), LLM judge, human labels |
+| **Scoring** | Are the answers right, and how do we know? | Deterministic eval suite (run on every release, red = rollback), LLM judge, human labels |
 | **Guardrails** | What may the agent do, and what is refused? | Charter in `config/agents.json`, `src/governance.ts`, `guardrail_events` |
 | **DevOps** | What is deployed, did it work, is it healthy? | CI, deploy workflow, `deployments`, `/version`, monitor workflow, Workers Observability |
 | **DevSecOps** | Is the code, the supply chain and the live service safe? | npm audit, gitleaks, CodeQL, Dependabot, least-privilege token, admin auth, security headers |

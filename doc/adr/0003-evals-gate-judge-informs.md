@@ -1,4 +1,4 @@
-# 0003 — Deterministic evals gate the deploy; the LLM judge informs and is calibrated by humans
+# 0003 — Deterministic evals gate each release; the LLM judge informs and is calibrated by humans
 
 ## Context
 
@@ -21,6 +21,9 @@ is trustworthy but only covers its questions.
 ## Consequences
 
 - ➕ The gate is free, reproducible and hard to argue with.
+- ➖ It measures the deployed Worker, so it runs after the deploy: a failure
+  turns the release red for a `wrangler rollback`, it does not block it. With
+  the free AI allocation used up it is skipped with a warning.
 - ➕ Quality is visible on real traffic, not only on the suite.
 - ➖ Measured with Llama 3.3 70B: arithmetic slips and run-to-run variance
   (different tasks fail on different runs), so the minimum is 75 %; the judge

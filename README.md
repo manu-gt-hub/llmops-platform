@@ -1,8 +1,8 @@
 # LLMOps Platform — an LLM agent in production on Cloudflare's free tier
 
 A live LLM agent with the operations around it: **FinOps** (exact cost per
-call, budgets that stop spending), **scoring** (an eval suite that gates every
-deploy, an LLM judge, human labels), **guardrails** (agent charter, pause
+call, budgets that stop spending), **scoring** (an eval suite run against every
+release that flags regressions for rollback, an LLM judge, human labels), **guardrails** (agent charter, pause
 switch, PII and prompt-injection checks), **DevOps** (CI/CD, versioned
 releases, monitoring) and **DevSecOps** (dependency audit, secret scanning,
 CodeQL, hardened endpoints). One Cloudflare Worker, no servers, no cost.

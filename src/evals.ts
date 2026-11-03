@@ -3,7 +3,7 @@
  *
  * Each task has an `expected_number` (any number in the answer within 0.01
  * passes) and/or `expected_keywords` / `forbidden_keywords`. No LLM judge:
- * grading is free and reproducible, so CI can gate a deploy on it.
+ * grading is free and reproducible, so every release can be checked against it.
  */
 
 import tasks from "../evaluation/tasks.json";
