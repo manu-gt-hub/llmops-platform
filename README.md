@@ -7,6 +7,10 @@ switch, PII and prompt-injection checks), **DevOps** (CI/CD, versioned
 releases, monitoring) and **DevSecOps** (dependency audit, secret scanning,
 CodeQL, hardened endpoints). One Cloudflare Worker, no servers, no cost.
 
+**Live dashboard (public, read-only):** `https://<worker>/dashboard` — cost and free-tier usage, calls and
+errors per day, success rate, judge score, guardrail hits, agents and their budgets, and the live
+evaluation results per release.
+
 [![CI](https://github.com/manu-gt-hub/llmops-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/manu-gt-hub/llmops-platform/actions/workflows/ci.yml)
 [![Deploy](https://github.com/manu-gt-hub/llmops-platform/actions/workflows/deploy.yml/badge.svg)](https://github.com/manu-gt-hub/llmops-platform/actions/workflows/deploy.yml)
 [![CodeQL](https://github.com/manu-gt-hub/llmops-platform/actions/workflows/codeql.yml/badge.svg)](https://github.com/manu-gt-hub/llmops-platform/actions/workflows/codeql.yml)
@@ -41,7 +45,8 @@ reasoning behind each choice: [doc/architecture.md](doc/architecture.md) ·
 | | Where |
 |---|---|
 | Chat with the agent | `https://<worker>/` |
-| Cost today, share of the free allocation, calls and errors per day, judge score, judge/human agreement, guardrail hits, agents (pause, guardrail mode), review queue, releases | `https://<worker>/admin` (password: `ADMIN_TOKEN`) |
+| **Public dashboard**: cost today and per day, free allocation used, calls and errors, success rate, judge score, guardrail hits, agents and budgets, live evaluation per release, releases. Read-only, nothing users typed | `https://<worker>/dashboard` |
+| Everything on the dashboard, plus the agent switches (pause, guardrail mode), recent runs with their questions, run details (steps, tool outputs, judge reasoning) and the review queue for human labels | `https://<worker>/admin` (password: `ADMIN_TOKEN`) |
 | Every request: tokens, cost, latency, prompt and response, judge score and human feedback | Cloudflare dashboard → AI → **AI Gateway** → `default` |
 | Worker logs, exceptions, latency | Cloudflare dashboard → Workers → llmops-platform → **Observability** |
 | Deployed version and commit | `https://<worker>/version` |
@@ -104,6 +109,7 @@ paid calls cost about 100× more. The judge stays on Workers AI.
 | Endpoint | Body | Description |
 |---|---|---|
 | `POST /api/ask` | `{"question"}` (≤ 500 chars) | Ask the agent → `{run_id, status, stop_reason, answer, steps, cost_usd}` |
+| `GET /dashboard` | — | Public read-only dashboard |
 | `GET /version` | — | Version, commit, provider and model |
 | `GET /health` | — | Liveness |
 | `GET /admin/api/summary` | — (password) | Today's numbers, as JSON |

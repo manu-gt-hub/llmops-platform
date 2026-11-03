@@ -1,5 +1,11 @@
 /**
- * admin.ts — The admin dashboard (/admin), protected by ADMIN_TOKEN.
+ * admin.ts — The dashboards.
+ *
+ *   GET  /dashboard              public, read-only: aggregates (cost, calls, errors,
+ *                                free allocation, judge, guardrails), agents and
+ *                                live evaluation by release. Nothing typed by users.
+ *
+ * Admin, protected by ADMIN_TOKEN:
  *
  *   GET  /admin                  dashboard: spend, free allocation, calls and
  *                                errors, judge scores, guardrails, agents
@@ -15,10 +21,13 @@
  */
 
 import type { Env } from "./env";
+import { grade, TASKS } from "./evals";
 import { CHARTERS } from "./governance";
 import { PASS_SCORE, setLabel } from "./judge";
 import { getSwitches, setSwitches } from "./ledger";
 import { FREE_NEURONS_PER_DAY } from "./pricing";
+
+const REPO_URL = "https://github.com/manu-gt-hub/llmops-platform";
 
 type Row = Record<string, unknown>;
 
@@ -36,7 +45,8 @@ const pct = (v: unknown) => (v === null || v === undefined ? "—" : `${Math.rou
 /** Bar chart as inline SVG. */
 export function bars(points: { label: string; value: number }[], format: (v: number) => string, color = "#3274d9"): string {
   if (!points.length) return '<p class="muted">No data yet.</p>';
-  const max = Math.max(...points.map((p) => p.value), 1e-9);
+  const top = Math.max(...points.map((p) => p.value));
+  const max = top || 1; // all zero: flat bars
   const w = 24;
   const h = 110;
   const body = points.map((p, i) => {
@@ -46,7 +56,7 @@ export function bars(points: { label: string; value: number }[], format: (v: num
       `<text x="${i * (w + 6) + w / 2}" y="${h + 14}" font-size="9" text-anchor="middle">${esc(p.label.slice(5))}</text></g>`;
   });
   return `<svg viewBox="0 0 ${points.length * (w + 6)} ${h + 18}" width="100%" height="140" role="img">${body.join("")}</svg>` +
-    `<p class="small muted">max ${esc(format(max))}</p>`;
+    `<p class="small muted">max ${esc(format(top))}</p>`;
 }
 
 function page(title: string, body: string): Response {
@@ -61,7 +71,7 @@ h1{font-size:1.4rem}h2{font-size:1.1rem;margin-top:2rem}.muted{color:var(--muted
 .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.8rem}
 .stat{font-size:1.4rem;font-weight:600}.wrap{overflow-x:auto}
 table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:.35rem .5rem;border-bottom:1px solid var(--line);vertical-align:top}
-th{font-size:.75rem;text-transform:uppercase;color:var(--muted)}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+.nowrap{white-space:nowrap}th{font-size:.75rem;text-transform:uppercase;color:var(--muted)}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
 button{font:inherit;padding:.15rem .6rem;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer}
 form{display:inline}pre{white-space:pre-wrap;word-break:break-word;margin:0;font-size:.85rem}svg text{fill:var(--muted)}
 </style></head><body><main>${body}</main></body></html>`, { headers: { "Content-Type": "text/html; charset=utf-8" } });
@@ -90,8 +100,11 @@ export async function summary(env: Env) {
   };
 }
 
-async function dashboard(env: Env): Promise<Response> {
-  const s = await summary(env);
+type Summary = Awaited<ReturnType<typeof summary>>;
+
+/** Aggregates shared by /admin and the public /dashboard. No user text here:
+ * only counts, costs, scores, rule names and releases. */
+async function metrics(env: Env, s: Summary): Promise<string> {
   const days = await all(env, `SELECT date(ts) AS day, SUM(cost_usd) AS cost, SUM(neurons) AS neurons, COUNT(*) AS calls,
     SUM(1 - ok) AS errors FROM llm_calls WHERE ts >= date('now', '-13 days') GROUP BY 1 ORDER BY 1`);
   const runs7 = await first(env, `SELECT COUNT(*) AS runs, AVG(status = 'success') AS success_rate,
@@ -103,26 +116,9 @@ async function dashboard(env: Env): Promise<Response> {
     WHERE ts >= date('now', '-13 days') GROUP BY 1 ORDER BY 1`);
   const rules = await all(env, `SELECT rule, action, COUNT(*) AS n FROM guardrail_events
     WHERE ts >= datetime('now', '-7 days') GROUP BY 1, 2 ORDER BY 3 DESC`);
-  const recent = await all(env, `SELECT r.run_id, r.ts, r.source, r.status, r.stop_reason, r.steps, r.cost_usd,
-    substr(r.question, 1, 90) AS question, j.score FROM runs r LEFT JOIN judgements j USING (run_id) ORDER BY r.ts DESC LIMIT 20`);
-  const review = await all(env, `SELECT r.run_id, substr(r.question, 1, 90) AS question, j.score, substr(j.reasoning, 1, 140) AS reasoning
-    FROM judgements j JOIN runs r USING (run_id) WHERE j.human_label IS NULL AND j.score < ${PASS_SCORE}
-    ORDER BY j.ts DESC LIMIT 20`);
   const releases = await all(env, "SELECT ts, version, commit_sha FROM deployments ORDER BY id DESC LIMIT 5");
 
-  const agentRows = s.agents.map((a) => {
-    const actions = [a.status === "active" ? "pause" : "resume", a.guardrail_mode === "enforce" ? "monitor" : "enforce"];
-    return `<tr><td>${esc(a.name)}</td><td>${pill(a.status)}</td><td>${esc(a.guardrail_mode)}</td>
-      <td>${pct(a.budget_used)} of ${usd(CHARTERS[a.name].daily_budget_usd, 2)}</td>
-      <td>${actions.map((x) => `<form method="post" action="/admin/agents/${esc(a.name)}"><button name="action" value="${x}">${x}</button></form>`).join(" ")}</td>
-      <td class="small muted">${esc(CHARTERS[a.name].purpose.slice(0, 120))}…</td></tr>`;
-  });
-
-  return page("LLMOps admin", `
-<h1>LLMOps admin <span class="small muted">v${esc(s.version)} · ${esc(s.commit)}</span></h1>
-<p class="small muted">Per-request logs, tokens and cost are also in the Cloudflare dashboard → AI → AI Gateway → ${esc(env.AI_GATEWAY_ID)};
-Worker errors and latency in Workers → Observability.</p>
-
+  return `
 <h2>Today (UTC)</h2>
 <div class="grid">
   <div class="card"><div class="small muted">LLM calls</div><div class="stat">${esc(s.today.calls)}</div></div>
@@ -149,14 +145,88 @@ Worker errors and latency in Workers → Observability.</p>
   <div class="card"><h2>Judge score per day</h2>${bars(judgeDays.map((d) => ({ label: String(d.day), value: Number(d.v) })), (v) => v.toFixed(2), "#a352cc")}</div>
 </div>
 
-<h2>Agents</h2>
-<div class="wrap"><table><tr><th>Agent</th><th>Status</th><th>Guardrails</th><th>Budget used today</th><th>Actions</th><th>Purpose</th></tr>
-${agentRows.join("")}</table></div>
-
 <h2>Guardrails (7 days)</h2>
 <div class="wrap"><table><tr><th>Rule</th><th>Action</th><th>Count</th></tr>
 ${rules.map((r) => `<tr><td>${esc(r.rule)}</td><td>${pill(r.action)}</td><td>${esc(r.n)}</td></tr>`).join("") || '<tr><td colspan="3" class="muted">None.</td></tr>'}
 </table></div>
+
+<h2>Releases</h2>
+<div class="wrap"><table><tr><th>Deployed (UTC)</th><th>Version</th><th>Commit</th></tr>
+${releases.map((r) => `<tr><td>${esc(r.ts)}</td><td>${esc(r.version)}</td><td><code>${esc(r.commit_sha)}</code></td></tr>`).join("") || '<tr><td colspan="3" class="muted">No deployments recorded.</td></tr>'}
+</table></div>`;
+}
+
+/** Agents table; with `actions` the pause / guardrail-mode buttons (admin only). */
+function agentsTable(s: Summary, actions: boolean): string {
+  const rows = s.agents.map((a) => {
+    const buttons = [a.status === "active" ? "pause" : "resume", a.guardrail_mode === "enforce" ? "monitor" : "enforce"]
+      .map((x) => `<form method="post" action="/admin/agents/${esc(a.name)}"><button name="action" value="${x}">${x}</button></form>`);
+    return `<tr><td class="nowrap">${esc(a.name)}</td><td>${pill(a.status)}</td><td>${esc(a.guardrail_mode)}</td>
+      <td>${pct(a.budget_used)} of ${usd(CHARTERS[a.name].daily_budget_usd, 2)}</td>
+      ${actions ? `<td>${buttons.join(" ")}</td>` : ""}<td class="small muted">${esc(CHARTERS[a.name].purpose)}</td></tr>`;
+  });
+  return `<h2>Agents</h2><div class="wrap"><table><tr><th>Agent</th><th>Status</th><th>Guardrails</th><th>Budget used today</th>
+    ${actions ? "<th>Actions</th>" : ""}<th>Purpose</th></tr>${rows.join("")}</table></div>`;
+}
+
+/** Live evaluation results, graded here against evaluation/tasks.json. Eval
+ * runs are only accepted for the suite's exact questions (see index.ts), and
+ * the questions shown come from the task file, never from a request. */
+async function evaluationSection(env: Env): Promise<string> {
+  const runs = await all(env, `SELECT r.version, r.task_id, r.answer, r.status, r.stop_reason, r.cost_usd, r.ts, j.score
+    FROM runs r LEFT JOIN judgements j USING (run_id) WHERE r.source = 'eval' ORDER BY r.ts DESC LIMIT 200`);
+  const graded = runs
+    .filter((r) => TASKS[String(r.task_id)])
+    .map((r): Row & { passed: boolean } => ({ ...r, passed: grade(TASKS[String(r.task_id)], (r.answer as string | null) ?? null).passed }));
+  const byVersion = new Map<string, { n: number; passed: number; cost: number }>();
+  for (const r of graded) {
+    const v = byVersion.get(String(r.version)) ?? { n: 0, passed: 0, cost: 0 };
+    byVersion.set(String(r.version), { n: v.n + 1, passed: v.passed + Number(r.passed), cost: v.cost + Number(r.cost_usd) });
+  }
+  const versions = [...byVersion].slice(0, 5).map(([version, v]) =>
+    `<tr><td>${esc(version)}</td><td>${esc(v.n)}</td><td>${pct(v.passed / v.n)}</td><td>${usd(v.cost / v.n, 5)}</td></tr>`);
+  const latest = graded.slice(0, 8).map((r) =>
+    `<tr><td class="small">${esc(r.ts)}</td><td class="nowrap">${esc(r.task_id)}</td><td>${esc(TASKS[String(r.task_id)].question)}</td>
+     <td class="nowrap">${r.passed ? '<span class="ok">✓ pass</span>' : '<span class="bad">✗ fail</span>'}</td>
+     <td>${pill(r.status)} <span class="small muted">${esc(r.stop_reason)}</span></td><td>${usd(r.cost_usd, 5)}</td><td>${score(r.score)}</td></tr>`);
+  return `<h2>Live evaluation by release <span class="small muted">the deploy gate: fixed questions, deterministic grading</span></h2>
+<div class="wrap"><table><tr><th>Version</th><th>Eval runs</th><th>Pass rate</th><th>Avg cost per task</th></tr>
+${versions.join("") || '<tr><td colspan="4" class="muted">No evaluation runs yet.</td></tr>'}</table></div>
+<h2>Latest evaluation runs</h2>
+<div class="wrap"><table><tr><th>When (UTC)</th><th>Task</th><th>Question</th><th>Result</th><th>Status</th><th>Cost</th><th>Judge</th></tr>
+${latest.join("") || '<tr><td colspan="7" class="muted">No evaluation runs yet.</td></tr>'}</table></div>`;
+}
+
+/** Public, read-only: aggregates, agents, evaluation. Nothing a user typed. */
+export async function publicDashboard(env: Env): Promise<Response> {
+  const s = await summary(env);
+  return page("LLMOps — live dashboard", `
+<h1>LLMOps — live dashboard <span class="small muted">v${esc(s.version)} · ${esc(s.commit)}</span></h1>
+<p>A live LLM agent on Cloudflare's free tier, with the operations around it: cost per call and budgets
+(FinOps), an eval suite that gates every deploy plus an LLM judge (scoring), charter and content guardrails,
+CI/CD and security checks. Everything below is computed live from the platform's own ledger.</p>
+<p class="small"><a href="/">Ask the agent</a> · <a href="${REPO_URL}">Source code</a> ·
+  <a href="${REPO_URL}/blob/main/doc/architecture.md">Architecture</a></p>
+${await metrics(env, s)}
+${agentsTable(s, false)}
+${await evaluationSection(env)}
+<p class="small muted">Read-only view. Run details, human review and the agent switches are in the password-protected admin.</p>`);
+}
+
+async function dashboard(env: Env): Promise<Response> {
+  const s = await summary(env);
+  const recent = await all(env, `SELECT r.run_id, r.ts, r.source, r.status, r.stop_reason, r.steps, r.cost_usd,
+    substr(r.question, 1, 90) AS question, j.score FROM runs r LEFT JOIN judgements j USING (run_id) ORDER BY r.ts DESC LIMIT 20`);
+  const review = await all(env, `SELECT r.run_id, substr(r.question, 1, 90) AS question, j.score, substr(j.reasoning, 1, 140) AS reasoning
+    FROM judgements j JOIN runs r USING (run_id) WHERE j.human_label IS NULL AND j.score < ${PASS_SCORE}
+    ORDER BY j.ts DESC LIMIT 20`);
+
+  return page("LLMOps admin", `
+<h1>LLMOps admin <span class="small muted">v${esc(s.version)} · ${esc(s.commit)}</span></h1>
+<p class="small muted">Public read-only view: <a href="/dashboard">/dashboard</a>. Per-request logs, tokens and cost are also in the
+Cloudflare dashboard → AI → AI Gateway → ${esc(env.AI_GATEWAY_ID)}; Worker errors and latency in Workers → Observability.</p>
+${await metrics(env, s)}
+${agentsTable(s, true)}
 
 <h2>Review queue <span class="small muted">judged below ${PASS_SCORE}, not labeled yet</span></h2>
 <div class="wrap"><table><tr><th>Run</th><th>Question</th><th>Judge</th><th>Label</th></tr>
@@ -170,11 +240,7 @@ ${recent.map((r) => `<tr><td class="small">${esc(r.ts)}</td><td><a href="/admin/
   <td>${esc(r.question)}</td><td>${pill(r.status)} <span class="small muted">${esc(r.stop_reason)}</span></td><td>${esc(r.steps)}</td>
   <td>${usd(r.cost_usd, 5)}</td><td>${score(r.score)}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">No runs yet.</td></tr>'}
 </table></div>
-
-<h2>Releases</h2>
-<div class="wrap"><table><tr><th>Deployed (UTC)</th><th>Version</th><th>Commit</th></tr>
-${releases.map((r) => `<tr><td>${esc(r.ts)}</td><td>${esc(r.version)}</td><td><code>${esc(r.commit_sha)}</code></td></tr>`).join("") || '<tr><td colspan="3" class="muted">No deployments recorded.</td></tr>'}
-</table></div>`);
+${await evaluationSection(env)}`);
 }
 
 const labelForm = (runId: string) =>

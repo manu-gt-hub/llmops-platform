@@ -6,12 +6,23 @@
  * grading is free and reproducible, so CI can gate a deploy on it.
  */
 
+import tasks from "../evaluation/tasks.json";
+
 export interface Task {
   id: string;
   question: string;
   expected_number?: number;
   expected_keywords?: string[];
   forbidden_keywords?: string[];
+}
+
+/** The suite, by task id. */
+export const TASKS: Record<string, Task> = Object.fromEntries((tasks as Task[]).map((t) => [t.id, t]));
+
+/** A run counts as an evaluation run only for one of the suite's exact
+ * questions, so nobody can put their own text on the public dashboard. */
+export function isSuiteQuestion(taskId: unknown, question: string): taskId is string {
+  return typeof taskId === "string" && TASKS[taskId]?.question === question;
 }
 
 export function numbersIn(text: string): number[] {

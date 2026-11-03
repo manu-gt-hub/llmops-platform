@@ -20,6 +20,7 @@ Decisions and their trade-offs: [ADRs](adr/README.md) · Operating it: [Runbook]
 flowchart LR
     user([User]) -->|"/  chat UI"| assets[Static assets<br/>public/]
     user -->|"POST /api/ask"| worker
+    visitor([Anyone]) -->|"/dashboard (read-only)"| worker
     admin([Operator]) -->|"/admin (password)"| worker
     subgraph cf[Cloudflare, free plan]
         assets
@@ -88,7 +89,7 @@ there is no other code path to the model, so nothing can skip them.
   platform inside the free allocation, so it is never billed.
 - **Rate limit** of 10 questions per minute per IP protects the allocation
   from a single client.
-- **Where to look:** `/admin` (today's spend, share of the free allocation,
+- **Where to look:** `/dashboard` (public) and `/admin` (today's spend, share of the free allocation,
   cost per day, cost per run, budget used per agent) and the AI Gateway
   dashboard (requests, tokens, cost, logs per request).
 
@@ -173,9 +174,22 @@ flowchart LR
 | `migrations/` | D1 schema |
 | `VERSION` | Release version shown live |
 
-## 9. What the free plan does not give us
+## 9. Dashboards
 
-- **No Grafana / Prometheus / Tempo.** Dashboards are `/admin` (ours) plus AI
+| Page | Who | Shows |
+|---|---|---|
+| `/dashboard` | anyone | Aggregates only: cost, free allocation, calls, errors, success rate, judge score and agreement, guardrail hits per rule, agents and budgets, live evaluation per release (graded on the fly from `evaluation/tasks.json`), releases |
+| `/admin` | operator (password) | The same, plus agent switches, recent runs with their (redacted) questions, run details and the review queue |
+| AI Gateway, Workers Observability | account owner | Per-request logs, tokens, cost; Worker exceptions and latency |
+
+The public page never shows text typed by users. Evaluation runs are the
+exception that proves the rule: a request only counts as one when its
+question is exactly one of the suite's, and the page reads the question from
+the task file, not from the database.
+
+## 10. What the free plan does not give us
+
+- **No Grafana / Prometheus / Tempo.** Dashboards are `/dashboard` and `/admin` (ours) plus AI
   Gateway and Workers Observability (Cloudflare's); there are no custom
   distributed traces beyond what Workers Observability records.
 - **AI Gateway Evaluations are deprecated**, so scoring is ours; the gateway

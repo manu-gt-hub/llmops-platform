@@ -197,6 +197,36 @@ describe("admin", () => {
   });
 });
 
+describe("public dashboard", () => {
+  const evalAsk = (fake: Fake, question: string, task_id: string) =>
+    worker.fetch(new Request(`${URL_BASE}/api/ask`, {
+      method: "POST", body: JSON.stringify({ question, task_id, source: "eval" }),
+    }), fake.env, ctx());
+
+  it("is public and shows aggregates and the graded evaluation, but nothing users typed nor admin actions", async () => {
+    const fake = fakeEnv(scriptedModel());
+    await ask(fake, "PRIVATE-QUESTION how much do 5 Starter and 3 Pro seats cost?");
+    const task07 = "What is the total monthly cost of a company with one workspace of 5 Starter seats and another of 3 Pro seats?";
+    await evalAsk(fake, task07, "task-07");
+
+    const resp = await admin(fake, "/dashboard"); // no Authorization header
+    expect(resp.status).toBe(200);
+    const html = await resp.text();
+    expect(html).toContain("Free Workers AI allocation used");
+    expect(html).toContain("task-07");
+    expect(html).toContain("✓ pass");
+    expect(html).not.toContain("PRIVATE-QUESTION");
+    expect(html).not.toContain('method="post"');
+    expect(html).not.toContain("/admin/runs/");
+  });
+
+  it("does not let a request pose as an evaluation run", async () => {
+    const fake = fakeEnv(scriptedModel());
+    await evalAsk(fake, "Spam shown on a public page", "task-01");
+    expect(fake.sql("SELECT source, task_id FROM runs")).toEqual([{ source: "chat", task_id: null }]);
+  });
+});
+
 describe("judge", () => {
   it("skips runs without an answer and survives a broken model reply", async () => {
     const fake = fakeEnv((input) => (input.tools ? { response: "", usage: {} } : { response: "not json", usage: {} }));

@@ -15,7 +15,7 @@ Guide for coding agents (and humans). Architecture and rationale:
 | `src/ledger.ts`, `migrations/` | D1 reads and writes, schema |
 | `src/judge.ts` | LLM-as-judge and human labels (also sent to AI Gateway) |
 | `src/evals.ts`, `evaluation/` | Deterministic grading, eval suite, baseline, live evaluator |
-| `src/admin.ts` | Admin dashboard (server-rendered, no JS) |
+| `src/admin.ts` | Public `/dashboard` (aggregates only) and `/admin` (server-rendered, no JS) |
 | `src/security.ts` | Headers, admin auth, CSRF check |
 | `src/tools.ts`, `src/corpus.ts` | The demo agent's tools and knowledge base |
 | `public/` | Chat UI (static) |
@@ -29,6 +29,7 @@ Guide for coding agents (and humans). Architecture and rationale:
 - New agent → `config/agents.json`. New paid model → `config/pricing.json`.
 - Schema change → a new file in `migrations/` (never edit an applied one).
 - Never store raw personal data: `redact()` before writing user or model text.
+- `/dashboard` is public: aggregates and suite questions only, never user text or run links.
 - Escape everything rendered in HTML (`esc()`); `public/app.js` uses `textContent` only.
 - The entry module (`src/index.ts`) exports only the handler.
 - A change meant to alter cost or quality updates `evaluation/baseline.json`.

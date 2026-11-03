@@ -5,15 +5,17 @@
  *   POST /api/ask       ask the research agent {question} → answer, run id, cost
  *   GET  /health        liveness
  *   GET  /version       version, commit, active provider and model
+ *   GET  /dashboard     public read-only dashboard (admin.ts)
  *   *    /admin...      admin dashboard (ADMIN_TOKEN), see admin.ts
  *
  * Public traffic is limited per IP (RATE_LIMITER) and by each agent's daily
  * budget; every response carries the security headers of security.ts.
  */
 
-import { handleAdmin } from "./admin";
+import { handleAdmin, publicDashboard } from "./admin";
 import { runAgent } from "./agent";
 import type { Env } from "./env";
+import { isSuiteQuestion } from "./evals";
 import { CHARTERS } from "./governance";
 import { judgeRun } from "./judge";
 import { activeModel } from "./llm";
@@ -39,9 +41,10 @@ async function ask(req: Request, env: Env, ctx: ExecutionContext): Promise<Respo
   if (!question) return error(400, "missing_question", "The question is empty.");
   if (question.length > MAX_QUESTION_CHARS) return error(400, "question_too_long", `At most ${MAX_QUESTION_CHARS} characters.`);
 
+  const isEval = body.source === "eval" && isSuiteQuestion(body.task_id, question);
   const result = await runAgent(env, question, {
-    source: body.source === "eval" ? "eval" : "chat",
-    taskId: typeof body.task_id === "string" ? body.task_id.slice(0, 40) : null,
+    source: isEval ? "eval" : "chat",
+    taskId: isEval ? (body.task_id as string) : null,
   });
   // Grade a sample of answered runs after responding (no latency for the user)
   if (result.answer && Math.random() < CHARTERS[`research-agent`].judge_sample_rate) {
@@ -67,6 +70,8 @@ export default {
         resp = Response.json({ version: env.APP_VERSION, commit: env.GIT_COMMIT, ...activeModel(env), ai_gateway: env.AI_GATEWAY_ID });
       } else if (pathname === "/api/ask") {
         resp = req.method === "POST" ? await ask(req, env, ctx) : error(405, "method_not_allowed", "Use POST.");
+      } else if (pathname === "/dashboard") {
+        resp = await publicDashboard(env);
       } else if (pathname === "/admin" || pathname.startsWith("/admin/")) {
         resp = adminAuth(req, env) ??
           (req.method === "POST" && !sameOrigin(req)
