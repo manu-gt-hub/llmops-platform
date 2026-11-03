@@ -1,8 +1,12 @@
 /** Pure functions: guardrails, charter, pricing, tools, grading, judge parsing. */
 
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
+import { renderCorpus } from "../scripts/build-corpus";
 import { LoopDetector } from "../src/agent";
+import { CORPUS } from "../src/corpus";
 import { gate, grade } from "../src/evals";
 import { charterViolations, redact, scan } from "../src/governance";
 import { buildPrompt, parseVerdict } from "../src/judge";
@@ -14,13 +18,13 @@ const active = { status: "active", guardrail_mode: "enforce" } as const;
 
 describe("charter", () => {
   it("allows what the agent declares", () => {
-    expect(charterViolations("research-agent", active, "@cf/meta/llama-3.3-70b-instruct-fp8-fast", ["calculator"])).toEqual([]);
+    expect(charterViolations("platform-copilot", active, "@cf/meta/llama-3.3-70b-instruct-fp8-fast", ["calculator"])).toEqual([]);
   });
 
   it("rejects unknown, paused, other models and other tools", () => {
     expect(rules(charterViolations("ghost", active, "m", []))).toEqual(["unknown_agent"]);
-    expect(rules(charterViolations("research-agent", { ...active, status: "paused" }, "m", []))).toEqual(["agent_paused"]);
-    expect(rules(charterViolations("research-agent", active, "gpt-5", ["send_email"]))).toEqual([
+    expect(rules(charterViolations("platform-copilot", { ...active, status: "paused" }, "m", []))).toEqual(["agent_paused"]);
+    expect(rules(charterViolations("platform-copilot", active, "gpt-5", ["send_email"]))).toEqual([
       "model_not_allowed", "tool_not_allowed"]);
   });
 });
@@ -40,9 +44,9 @@ describe("guardrails", () => {
     expect(rules(scan("input", "order 1234 5678 9012 3456"))).not.toContain("pii_card");
   });
 
-  it("has no false positives on handbook figures", () => {
+  it("never blocks the copilot reading its own documentation", () => {
     expect(scan("input", "12 Pro seats cost $3,549.60 per year; Sev1 within 15 minutes; 99.95% uptime.")).toEqual([]);
-    for (const doc of ["plans", "sla", "oncall", "expenses"]) expect(scan("input", readDoc(doc))).toEqual([]);
+    for (const doc of Object.keys(CORPUS)) expect(scan("input", readDoc(doc)), doc).toEqual([]);
   });
 
   it("checks prompt injection on input only", () => {
@@ -77,14 +81,19 @@ describe("tools", () => {
     expect(() => calculator(expr)).toThrow(ToolError);
   });
 
-  it("searches and reads the handbook", () => {
-    expect(searchDocs("single sign-on SSO plan")).toContain("[plans]");
-    expect(() => readDoc("nope")).toThrow(/Available: plans/);
+  it("searches and reads the documentation", () => {
+    expect(searchDocs("rate limit questions per minute")).toContain("[architecture]");
+    expect(readDoc("adr-0003")).toContain("judge");
+    expect(() => readDoc("nope")).toThrow(/Available: architecture/);
+  });
+
+  it("bundles the current docs (run npm run corpus after editing doc/)", () => {
+    expect(readFileSync(new URL("../src/corpus.ts", import.meta.url), "utf-8")).toBe(renderCorpus());
   });
 
   it("detects a repeated tool call", () => {
     const loops = new LoopDetector(3);
-    expect([1, 2, 3].map(() => loops.check("search_docs", { query: "x" }))).toEqual([false, false, true]);
+    expect([1, 2, 3].map(() => loops.check("search_docs", { query: "x" }))).toEqual(["ok", "warn", "loop"]);
   });
 });
 

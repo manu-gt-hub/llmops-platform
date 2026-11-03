@@ -17,7 +17,9 @@ Guide for coding agents (and humans). Architecture and rationale:
 | `src/evals.ts`, `evaluation/` | Deterministic grading, eval suite, baseline, live evaluator |
 | `src/admin.ts` | Public `/dashboard` (aggregates only) and `/admin` (server-rendered, no JS) |
 | `src/security.ts` | Headers, admin auth, CSRF check |
-| `src/tools.ts`, `src/corpus.ts` | The demo agent's tools and knowledge base |
+| `src/tools.ts` | The copilot's tools: docs search (IDF), live metrics, calculator |
+| `src/corpus.ts` | `doc/` bundled for the copilot — generated, `npm run corpus` after editing docs |
+| `src/i18n.ts`, `public/app.js` | English / Spanish texts (dashboards, chat) |
 | `public/` | Chat UI (static) |
 | `test/` | vitest: units, and the Worker end to end on SQLite + scripted AI |
 
@@ -33,6 +35,9 @@ Guide for coding agents (and humans). Architecture and rationale:
 - Escape everything rendered in HTML (`esc()`); `public/app.js` uses `textContent` only.
 - The entry module (`src/index.ts`) exports only the handler.
 - A change meant to alter cost or quality updates `evaluation/baseline.json`.
+- Edited `doc/`? Run `npm run corpus`: the docs are the copilot's knowledge base.
+- New UI text: add it in English and Spanish (a test checks both dictionaries).
+- Keep `@types/node` on the Node major of the workflows (22).
 
 ## Checks
 

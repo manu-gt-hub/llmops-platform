@@ -78,14 +78,18 @@ there is no other code path to the model, so nothing can skip them.
 
 ## 3. FinOps
 
-- **Exact cost per call.** Workers AI returns the neurons each call used;
-  cost = neurons × $0.011 / 1,000 (what it would cost beyond the free tier).
-  Paid models are priced per token from [config/pricing.json](../config/pricing.json).
+- **Exact cost per call.** Workers AI returns the neurons each call used.
+  The ledger records their **list-price value**, neurons × $0.011 / 1,000;
+  paid models are priced per token from [config/pricing.json](../config/pricing.json).
+- **Two figures, never mixed:** *usage at list price* (what the platform
+  would cost without the free tier; budgets are measured in it, so a paid
+  provider behaves the same) and *billed* (only neurons beyond the 10,000
+  free a day, plus paid providers). With the defaults, billed stays at $0.
 - **Budgets that stop spending**, per agent, from
   [config/agents.json](../config/agents.json): `daily_budget_usd` and
   `max_run_cost_usd`. Checked before every call; a run that hits one ends
   as `killed / daily_budget` or `killed / run_cost_limit`. The defaults
-  (research agent $0.08 + judge $0.02 a day ≈ 9,000 neurons) keep the whole
+  (copilot $0.08 + judge $0.02 a day ≈ 9,000 neurons) keep the whole
   platform inside the free allocation, so it is never billed.
 - **Rate limit** of 10 questions per minute per IP protects the allocation
   from a single client.
@@ -99,16 +103,24 @@ Three layers, from cheapest and most trusted to most informative:
 
 | Layer | What | Blocks? |
 |---|---|---|
-| **Deterministic evals** | 8 handbook questions with checkable answers ([evaluation/tasks.json](../evaluation/tasks.json)): expected number or keywords. Run on the live Worker after every deploy; fails if the pass rate or the average cost per task breaks [evaluation/baseline.json](../evaluation/baseline.json) | Yes: the deploy run turns red |
+| **Deterministic evals** | 8 questions about the platform, with answers checkable in its docs ([evaluation/tasks.json](../evaluation/tasks.json)): expected number or keywords. Run on the live Worker after every deploy; fails if the pass rate or the average cost per task breaks [evaluation/baseline.json](../evaluation/baseline.json) | Yes: the deploy run turns red |
 | **LLM judge** | A sample of real runs graded 1-5 on *on purpose*, *grounded*, *helpful* ([src/judge.ts](../src/judge.ts)), in the background. Score also attached to the AI Gateway log of the request | No: informs and alerts (monitor) |
 | **Human labels** | 👍 / 👎 on judged runs in `/admin`; *judge / human agreement* measures how far to trust the judge. Sent to AI Gateway as feedback | — |
 
-Measured on the real model while building it: Llama 3.3 70B passes 6 of 8
-tasks (it sometimes forgets a factor in a calculation), and the run-to-run
-variation is real: different tasks fail on different runs. Hence a 75 %
-minimum, not 100 %. The judge (same model family) caught one wrong total and
-missed another: it is lenient on arithmetic, which is exactly why it informs
-and the deterministic suite gates.
+What measuring on the real model (Llama 3.3 70B) taught:
+
+- **With tools available it keeps calling them**, even when the results
+  already hold the answer: the first copilot version passed 5 of 8, stopped
+  by the loop guardrail. Reproduced in isolation: without tools it answered 3
+  of 3. Fix: after a repeated call, and on the last allowed step, the next
+  call is made **without tools** (`tool_choice: none` on paid providers), so
+  a loop becomes an answer. Since then: 8 of 8, on two runs.
+- **Retrieval quality is agent quality**: plain word overlap ranked long
+  sections first; IDF weighting and a 5-letter stem fixed it.
+- **Arithmetic and run-to-run variance remain**, so the gate asks for 75 %, not
+  100 %. The judge (same model family) caught one wrong total and missed
+  another: it is lenient on arithmetic, which is exactly why it informs and
+  the deterministic suite gates.
 
 ## 5. Guardrails
 
@@ -169,6 +181,7 @@ flowchart LR
 |---|---|
 | `wrangler.jsonc` | Bindings (AI, D1, assets, rate limit), provider and models |
 | `config/agents.json` | Agent charters: purpose, models, tools, guardrail mode, judge sampling, budgets |
+| `doc/` → `src/corpus.ts` | The copilot's knowledge base: these docs, bundled by `npm run corpus` (a test fails if stale) |
 | `config/pricing.json` | Neuron price and free allocation; per-token prices of paid models |
 | `evaluation/tasks.json`, `evaluation/baseline.json` | Eval suite and its gate |
 | `migrations/` | D1 schema |
@@ -178,7 +191,7 @@ flowchart LR
 
 | Page | Who | Shows |
 |---|---|---|
-| `/dashboard` | anyone | Aggregates only: cost, free allocation, calls, errors, success rate, judge score and agreement, guardrail hits per rule, agents and budgets, live evaluation per release (graded on the fly from `evaluation/tasks.json`), releases |
+| `/dashboard` | anyone (EN / ES) | Aggregates only: cost, free allocation, calls, errors, success rate, judge score and agreement, guardrail hits per rule, agents and budgets, live evaluation per release (graded on the fly from `evaluation/tasks.json`), releases |
 | `/admin` | operator (password) | The same, plus agent switches, recent runs with their (redacted) questions, run details and the review queue |
 | AI Gateway, Workers Observability | account owner | Per-request logs, tokens, cost; Worker exceptions and latency |
 
