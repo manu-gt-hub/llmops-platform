@@ -42,7 +42,9 @@ export interface ToolOutcome {
 export interface Conversation {
   provider: string;
   model: string;
-  step(tags: Record<string, string>): Promise<Turn>;
+  /** One model call. With finalAnswer the model may not call tools and must
+   * answer from what it has (see agent.ts). */
+  step(tags: Record<string, string>, finalAnswer?: boolean): Promise<Turn>;
   addResults(outcomes: ToolOutcome[]): void;
 }
 
@@ -90,12 +92,12 @@ export class WorkersAiConversation implements Conversation {
     this.messages = [{ role: "system", content: system }, { role: "user", content: question }];
   }
 
-  async step(tags: Record<string, string>): Promise<Turn> {
+  async step(tags: Record<string, string>, finalAnswer = false): Promise<Turn> {
     let out: WorkersAiResult;
     try {
       out = (await this.env.AI.run(
         this.model as keyof AiModels,
-        { messages: this.messages, tools: this.tools, max_tokens: 1024 } as never,
+        { messages: this.messages, tools: finalAnswer ? undefined : this.tools, max_tokens: 1024 } as never,
         { gateway: { id: this.env.AI_GATEWAY_ID, metadata: tags } },
       )) as WorkersAiResult;
     } catch (e) {
@@ -154,7 +156,7 @@ class AnthropicConversation implements Conversation {
     this.messages = [{ role: "user", content: question }];
   }
 
-  async step(tags: Record<string, string>): Promise<Turn> {
+  async step(tags: Record<string, string>, finalAnswer = false): Promise<Turn> {
     const gw = await gatewayOptions(this.env, "anthropic", tags);
     const client = new Anthropic({ apiKey: this.env.ANTHROPIC_API_KEY, baseURL: gw.baseURL, defaultHeaders: gw.headers });
     const fallback = FALLBACK_MODELS.has(this.model)
@@ -165,6 +167,8 @@ class AnthropicConversation implements Conversation {
       max_tokens: 16000,
       system: this.system,
       tools: this.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters })),
+      // Tools stay declared (cache-friendly); "none" forbids calling them
+      ...(finalAnswer ? { tool_choice: { type: "none" as const } } : {}),
       messages: this.messages,
       output_config: { effort: "medium" },
       ...fallback,
@@ -212,13 +216,14 @@ class OpenAIConversation implements Conversation {
     this.messages = [{ role: "system", content: system }, { role: "user", content: question }];
   }
 
-  async step(tags: Record<string, string>): Promise<Turn> {
+  async step(tags: Record<string, string>, finalAnswer = false): Promise<Turn> {
     const gw = await gatewayOptions(this.env, "openai", tags);
     const client = new OpenAI({ apiKey: this.env.OPENAI_API_KEY, baseURL: gw.baseURL, defaultHeaders: gw.headers });
     const response = await client.chat.completions.create({
       model: this.model,
       messages: this.messages,
       tools: this.tools.map((t) => ({ type: "function" as const, function: t })),
+      ...(finalAnswer ? { tool_choice: "none" as const } : {}),
     });
     const choice = response.choices[0];
     this.messages.push(choice.message);

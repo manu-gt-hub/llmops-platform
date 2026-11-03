@@ -1,5 +1,5 @@
 /**
- * agent.ts — The research agent loop. Every LLM call goes through `guardedStep`,
+ * agent.ts — The platform copilot loop. Every LLM call goes through `runAgent`,
  * the single place where the platform's rules are applied:
  *
  *   before the call   charter (paused, model, tools) · daily and per-run budget
@@ -18,15 +18,16 @@ import { addStep, finishRun, getSwitches, recordCall, recordEvents, spent, start
 import { costUsd } from "./pricing";
 import { runTool, TOOL_SPECS, ToolError } from "./tools";
 
-export const AGENT = "research-agent";
+export const AGENT = "platform-copilot";
 
 export const SYSTEM_PROMPT =
-  "You are a research assistant for Acme Cloud employees. Answer questions using only the Acme Cloud " +
-  "handbook, which you can query with your tools. Look up every fact you rely on. For any arithmetic, " +
-  "check the units of each figure (per seat, per month, per night, per day...) and pass every factor in a " +
-  "single calculator expression. When you have the answer, reply with one short paragraph that states the final " +
-  "figure or name explicitly. If the question is not about Acme Cloud, or the handbook does not contain " +
-  "the answer, say so.";
+  "You are the copilot of an LLMOps platform: a live LLM agent on Cloudflare with FinOps, scoring, guardrails, " +
+  "DevOps and security around it. Answer questions about how the platform works, why it was designed that way, " +
+  "how to operate it, and how it is doing right now. Use search_docs or read_doc for how and why, and " +
+  "get_live_metrics for current numbers; never guess a figure. For any arithmetic, check the units of each figure " +
+  "and pass every factor in a single calculator expression. Reply with one short paragraph that states the answer " +
+  "explicitly. Always reply in the language the user wrote in (for example, in Spanish if the question is in " +
+  "Spanish), even though the documentation is in English. If the question is not about the platform, say so.";
 
 export interface RunResult {
   runId: string;
@@ -49,13 +50,16 @@ class Stop extends Error {
 export class LoopDetector {
   private seen = new Map<string, number>();
   constructor(private limit = 3) {}
-  check(name: string, args: Record<string, unknown>): boolean {
+  /** "ok", "warn" (one repeat left: the model is told) or "loop" (stop the run). */
+  check(name: string, args: Record<string, unknown>): "ok" | "warn" | "loop" {
     const key = `${name}:${JSON.stringify(args, Object.keys(args).sort())}`;
     const count = (this.seen.get(key) ?? 0) + 1;
     this.seen.set(key, count);
-    return count >= this.limit;
+    return count >= this.limit ? "loop" : count === this.limit - 1 ? "warn" : "ok";
   }
 }
+
+const REPEAT_WARNING = "\n\n[platform] You already made this exact call. Answer now with the results you have.";
 
 /** Apply a content-guardrail result: always recorded, blocks in enforce mode. */
 async function guard(env: Env, runId: string, sw: Switches, findings: Finding[]) {
@@ -84,6 +88,10 @@ export async function runAgent(
   let status: RunResult["status"] = "failed";
   let stopReason = "max_steps";
   let newInput = [question];
+  // Measured on Llama 3.3: with tools available it keeps calling them even when
+  // the results already hold the answer. After a repeated call, and on the last
+  // allowed step, the next call is made without tools so the model must answer.
+  let finalAnswer = false;
 
   try {
     for (let i = 0; i < charter.max_steps; i++) {
@@ -111,7 +119,8 @@ export async function runAgent(
       const started = Date.now();
       let turn;
       try {
-        turn = await conversation.step({ agent: AGENT, run_id: runId, source: opts.source });
+        turn = await conversation.step({ agent: AGENT, run_id: runId, source: opts.source },
+          finalAnswer || i === charter.max_steps - 1);
       } catch (e) {
         const latencyMs = Date.now() - started;
         await recordCall(env, { agent: AGENT, run_id: runId, provider: conversation.provider, model: conversation.model,
@@ -141,14 +150,19 @@ export async function runAgent(
       let loop = false;
       for (const call of turn.toolCalls) {
         toolCalls++;
-        loop ||= loops.check(call.name, call.args);
+        const repeat = loops.check(call.name, call.args);
+        loop ||= repeat === "loop";
         const t0 = Date.now();
         let outcome: ToolOutcome;
         try {
-          outcome = { call, output: runTool(call.name, call.args), isError: false };
+          outcome = { call, output: await runTool(env, call.name, call.args), isError: false };
         } catch (e) {
           if (!(e instanceof ToolError)) throw e;
           outcome = { call, output: e.message, isError: true };
+        }
+        if (repeat === "warn") {
+          outcome.output += REPEAT_WARNING;
+          finalAnswer = true;
         }
         outcomes.push(outcome);
         await addStep(env, { runId, step: steps, kind: "tool", name: call.name, ok: !outcome.isError,

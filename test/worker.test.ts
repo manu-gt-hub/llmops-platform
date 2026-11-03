@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import { judgeRun } from "../src/judge";
 import worker from "../src/index";
+import { runTool } from "../src/tools";
 import { basic, ctx, type Fake, fakeEnv, scriptedModel } from "./fakes";
 
 const URL_BASE = "https://llmops.test";
@@ -35,12 +36,12 @@ describe("ask: the happy path", () => {
     expect(body.answer).toContain("147");
 
     const calls = fake.sql("SELECT agent, neurons, cost_usd, gateway_log_id FROM llm_calls ORDER BY id");
-    expect(calls.map((c) => c.agent)).toEqual(["research-agent", "research-agent", "research-agent", "judge"]);
+    expect(calls.map((c) => c.agent)).toEqual(["platform-copilot", "platform-copilot", "platform-copilot", "judge"]);
     expect(calls[0].cost_usd).toBeCloseTo(11 * 0.011 / 1000);
     expect(body.cost_usd).toBeCloseTo(3 * 11 * 0.011 / 1000);
 
     // AI Gateway: every call tagged with agent and run, judge score on the run's last log
-    expect(fake.gatewayCalls[0].metadata).toMatchObject({ agent: "research-agent", run_id: body.run_id });
+    expect(fake.gatewayCalls[0].metadata).toMatchObject({ agent: "platform-copilot", run_id: body.run_id });
     expect(fake.patched).toEqual([{ logId: "log-3", data: { score: 92 } }]);
 
     const [judgement] = fake.sql("SELECT on_purpose, grounded, helpful, score FROM judgements");
@@ -86,7 +87,7 @@ describe("ask: guardrails, budgets and limits", () => {
 
   it("only flags personal data in monitor mode, and stores it redacted", async () => {
     const fake = fakeEnv(scriptedModel());
-    fake.sql("INSERT INTO agent_switches (agent, status, guardrail_mode) VALUES ('research-agent', 'active', 'monitor')");
+    fake.sql("INSERT INTO agent_switches (agent, status, guardrail_mode) VALUES ('platform-copilot', 'active', 'monitor')");
     const { body } = await ask(fake, "I am jane.doe@acme.com, monthly cost of 5 Starter and 3 Pro seats?");
     expect(body.status).toBe("success");
     expect(fake.sql("SELECT rule, action FROM guardrail_events")).toEqual([{ rule: "pii_email", action: "flagged" }]);
@@ -101,7 +102,7 @@ describe("ask: guardrails, budgets and limits", () => {
 
   it("refuses a paused agent", async () => {
     const fake = fakeEnv(scriptedModel());
-    fake.sql("INSERT INTO agent_switches (agent, status, guardrail_mode) VALUES ('research-agent', 'paused', 'enforce')");
+    fake.sql("INSERT INTO agent_switches (agent, status, guardrail_mode) VALUES ('platform-copilot', 'paused', 'enforce')");
     expect((await ask(fake, "Which plan has SSO?")).body).toMatchObject({ status: "killed", stop_reason: "agent_paused" });
   });
 
@@ -112,7 +113,7 @@ describe("ask: guardrails, budgets and limits", () => {
 
   it("stops when the daily budget is spent", async () => {
     const fake = fakeEnv(scriptedModel());
-    fake.sql("INSERT INTO llm_calls (agent, provider, model, cost_usd) VALUES ('research-agent', 'workers-ai', 'm', 1)");
+    fake.sql("INSERT INTO llm_calls (agent, provider, model, cost_usd) VALUES ('platform-copilot', 'workers-ai', 'm', 1)");
     expect((await ask(fake, "Which plan has SSO?")).body).toMatchObject({ status: "killed", stop_reason: "daily_budget" });
   });
 
@@ -122,7 +123,29 @@ describe("ask: guardrails, budgets and limits", () => {
     expect((await ask(fake, "Which plan has SSO?")).body).toMatchObject({ status: "killed", stop_reason: "run_cost_limit" });
   });
 
-  it("kills a looping agent", async () => {
+  it("turns a repeated call into a final answer without tools", async () => {
+    // Like Llama 3.3: keeps calling the same tool while it is offered tools
+    const fake = fakeEnv((input) =>
+      input.tools
+        ? { tool_calls: [{ name: "search_docs", arguments: { query: "same" } }], usage: {} }
+        : { response: "Done.", usage: {} });
+    const { body } = await ask(fake, "Which plan has SSO?");
+    expect(body).toMatchObject({ status: "success", answer: "Done.", steps: 3 });
+    const outputs = fake.sql("SELECT output FROM steps WHERE kind = 'tool' ORDER BY id").map((r) => String(r.output));
+    expect(outputs[0]).not.toContain("[platform]");
+    expect(outputs[1]).toContain("[platform] You already made this exact call");
+  });
+
+  it("forces an answer on the last allowed step", async () => {
+    let n = 0;
+    const fake = fakeEnv((input) =>
+      input.tools
+        ? { tool_calls: [{ name: "search_docs", arguments: { query: `q${n++}` } }], usage: {} }
+        : { response: "Final.", usage: {} });
+    expect((await ask(fake, "Which plan has SSO?")).body).toMatchObject({ status: "success", answer: "Final.", steps: 6 });
+  });
+
+  it("kills a looping agent that ignores the final-answer turn", async () => {
     const fake = fakeEnv(() => ({ tool_calls: [{ name: "search_docs", arguments: { query: "same" } }], usage: {} }));
     expect((await ask(fake, "Which plan has SSO?")).body).toMatchObject({ status: "killed", stop_reason: "loop_detected" });
   });
@@ -156,7 +179,7 @@ describe("admin", () => {
 
   it("pauses an agent from a same-origin form, and refuses cross-site posts", async () => {
     const fake = fakeEnv(scriptedModel());
-    const post = (origin: string) => admin(fake, "/admin/agents/research-agent", {
+    const post = (origin: string) => admin(fake, "/admin/agents/platform-copilot", {
       method: "POST", body: new URLSearchParams({ action: "pause" }),
       headers: { Authorization: basic("s3cret"), Origin: origin },
     });
@@ -185,7 +208,7 @@ describe("admin", () => {
     const summary = await (await admin(fake, "/admin/api/summary", { headers: { Authorization: basic("s3cret") } })).json() as
       { today: { calls: number }; agents: { name: string; budget_used: number }[] };
     expect(summary.today.calls).toBe(4);
-    expect(summary.agents.find((a) => a.name === "research-agent")!.budget_used).toBeGreaterThan(0);
+    expect(summary.agents.find((a) => a.name === "platform-copilot")!.budget_used).toBeGreaterThan(0);
   });
 
   it("escapes model output in pages", async () => {
@@ -204,10 +227,9 @@ describe("public dashboard", () => {
     }), fake.env, ctx());
 
   it("is public and shows aggregates and the graded evaluation, but nothing users typed nor admin actions", async () => {
-    const fake = fakeEnv(scriptedModel());
-    await ask(fake, "PRIVATE-QUESTION how much do 5 Starter and 3 Pro seats cost?");
-    const task07 = "What is the total monthly cost of a company with one workspace of 5 Starter seats and another of 3 Pro seats?";
-    await evalAsk(fake, task07, "task-07");
+    const fake = fakeEnv(scriptedModel("It would cost $0.055."));
+    await ask(fake, "PRIVATE-QUESTION how much have we spent today?");
+    await evalAsk(fake, "Beyond the free allocation, how much would 5,000 Workers AI neurons cost in USD?", "task-07");
 
     const resp = await admin(fake, "/dashboard"); // no Authorization header
     expect(resp.status).toBe(200);
@@ -218,6 +240,34 @@ describe("public dashboard", () => {
     expect(html).not.toContain("PRIVATE-QUESTION");
     expect(html).not.toContain('method="post"');
     expect(html).not.toContain("/admin/runs/");
+  });
+
+  it("speaks Spanish with ?lang=es or a Spanish browser", async () => {
+    const fake = fakeEnv(scriptedModel());
+    const es = await (await admin(fake, "/dashboard?lang=es")).text();
+    expect(es).toContain('<html lang="es">');
+    expect(es).toContain("Facturado hoy");
+    const browser = await (await admin(fake, "/dashboard", { headers: { "Accept-Language": "es-ES,es;q=0.9" } })).text();
+    expect(browser).toContain("Uso a precio de lista");
+    expect(await (await admin(fake, "/dashboard")).text()).toContain("Billed today");
+  });
+
+  it("bills nothing within the free allocation, and only the excess beyond it", async () => {
+    const fake = fakeEnv(scriptedModel());
+    const summary = async () => (await (await admin(fake, "/admin/api/summary", { headers: { Authorization: basic("s3cret") } }))
+      .json() as { today: { billed_usd: number; value_usd: number } }).today;
+    fake.sql("INSERT INTO llm_calls (agent, provider, model, neurons, cost_usd) VALUES ('platform-copilot', 'workers-ai', 'm', 9000, 0.099)");
+    expect(await summary()).toMatchObject({ billed_usd: 0, value_usd: 0.099 });
+    fake.sql("INSERT INTO llm_calls (agent, provider, model, neurons, cost_usd) VALUES ('platform-copilot', 'workers-ai', 'm', 2000, 0.022)");
+    expect((await summary()).billed_usd).toBeCloseTo(1000 * 0.011 / 1000); // 11,000 - 10,000 free
+  });
+
+  it("does not grade runs of an older suite against the current answers", async () => {
+    const fake = fakeEnv(scriptedModel());
+    fake.sql("INSERT INTO runs (run_id, agent, source, task_id, model, question, answer, status, version) " +
+      "VALUES ('old', 'platform-copilot', 'eval', 'task-01', 'm', 'A question of a previous suite', '147', 'success', '1.9.0')");
+    const html = await (await admin(fake, "/dashboard")).text();
+    expect(html).not.toContain("1.9.0");
   });
 
   it("does not let a request pose as an evaluation run", async () => {
@@ -235,6 +285,16 @@ describe("judge", () => {
   });
 });
 
+describe("live metrics tool", () => {
+  it("gives the copilot today's numbers from the ledger", async () => {
+    const fake = fakeEnv(scriptedModel());
+    fake.sql("INSERT INTO llm_calls (agent, provider, model, neurons, cost_usd) VALUES ('platform-copilot', 'workers-ai', 'm', 1500, 0.0165)");
+    const metrics = JSON.parse(await runTool(fake.env, "get_live_metrics", {}));
+    expect(metrics.today_utc).toMatchObject({ llm_calls: 1, neurons_used: 1500, free_allocation_used_percent: 15, billed_usd: 0 });
+    expect(metrics.agents.map((a: { name: string }) => a.name)).toEqual(["platform-copilot", "judge"]);
+  });
+});
+
 describe("entry module", () => {
   it("exports only the handler (the Workers runtime rejects other exports)", async () => {
     expect(Object.keys(await import("../src/index"))).toEqual(["default"]);
@@ -246,5 +306,15 @@ describe("chat UI", () => {
     const { readFileSync } = await import("node:fs");
     const js = readFileSync(new URL("../public/app.js", import.meta.url), "utf-8");
     expect(js).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write/);
+  });
+
+  it("has every text of the page in English and Spanish", async () => {
+    const { readFileSync } = await import("node:fs");
+    const js = readFileSync(new URL("../public/app.js", import.meta.url), "utf-8");
+    const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf-8");
+    const dict = new Function(`return ${js.slice(js.indexOf("{", js.indexOf("const I18N")), js.indexOf("};\n\nconst storage") + 1)}`)() as
+      Record<"en" | "es", Record<string, string>>;
+    expect(Object.keys(dict.es).sort()).toEqual(Object.keys(dict.en).sort());
+    for (const [, key] of html.matchAll(/data-i18n(?:-placeholder)?="(\w+)"/g)) expect(dict.es[key], key).toBeTruthy();
   });
 });

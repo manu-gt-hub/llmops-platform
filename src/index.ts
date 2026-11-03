@@ -13,9 +13,10 @@
  */
 
 import { handleAdmin, publicDashboard } from "./admin";
-import { runAgent } from "./agent";
+import { AGENT, runAgent } from "./agent";
 import type { Env } from "./env";
 import { isSuiteQuestion } from "./evals";
+import { pickLang } from "./i18n";
 import { CHARTERS } from "./governance";
 import { judgeRun } from "./judge";
 import { activeModel } from "./llm";
@@ -47,7 +48,7 @@ async function ask(req: Request, env: Env, ctx: ExecutionContext): Promise<Respo
     taskId: isEval ? (body.task_id as string) : null,
   });
   // Grade a sample of answered runs after responding (no latency for the user)
-  if (result.answer && Math.random() < CHARTERS[`research-agent`].judge_sample_rate) {
+  if (result.answer && Math.random() < CHARTERS[AGENT].judge_sample_rate) {
     ctx.waitUntil(judgeRun(env, result.runId));
   }
   return Response.json({
@@ -71,12 +72,12 @@ export default {
       } else if (pathname === "/api/ask") {
         resp = req.method === "POST" ? await ask(req, env, ctx) : error(405, "method_not_allowed", "Use POST.");
       } else if (pathname === "/dashboard") {
-        resp = await publicDashboard(env);
+        resp = await publicDashboard(env, pickLang(req));
       } else if (pathname === "/admin" || pathname.startsWith("/admin/")) {
         resp = adminAuth(req, env) ??
           (req.method === "POST" && !sameOrigin(req)
             ? new Response("Cross-site request refused", { status: 403 })
-            : await handleAdmin(req, env, pathname));
+            : await handleAdmin(req, env, pathname, pickLang(req)));
       } else {
         resp = await env.ASSETS.fetch(req);
       }
