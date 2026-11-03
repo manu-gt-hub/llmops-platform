@@ -327,4 +327,14 @@ describe("chat UI", () => {
     expect(Object.keys(dict.es).sort()).toEqual(Object.keys(dict.en).sort());
     for (const [, key] of html.matchAll(/data-i18n(?:-placeholder)?="(\w+)"/g)) expect(dict.es[key], key).toBeTruthy();
   });
+
+  it("starts in English and remembers only a language the visitor picked", async () => {
+    const { readFileSync } = await import("node:fs");
+    const js = readFileSync(new URL("../public/app.js", import.meta.url), "utf-8");
+    expect(js).toContain('storage.get(LANG_KEY) || "en"');
+    expect(js).not.toMatch(/navigator\.language/);
+    // Saved on click only, never while applying the language at load
+    const applyLang = js.slice(js.indexOf("function applyLang"), js.indexOf("\n}\n", js.indexOf("function applyLang")));
+    expect(applyLang).not.toContain("storage.set");
+  });
 });
