@@ -1,6 +1,6 @@
 // Chat UI: posts the question to /api/ask and shows the answer with its run
 // metadata. Text is inserted with textContent only (no HTML from the model).
-// UI language: EN / ES (switcher, defaults to the browser's language); the
+// UI language: EN / ES (switcher, English by default); the
 // agent answers in the language of the question.
 
 const I18N = {
@@ -48,7 +48,7 @@ const storage = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
 };
-let lang = storage.get("lang") || ((navigator.language || "").toLowerCase().startsWith("es") ? "es" : "en");
+let lang = storage.get("lang") || "en";
 const t = (key) => I18N[lang][key] ?? I18N.en[key];
 
 function applyLang(next) {

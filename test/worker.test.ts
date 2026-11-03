@@ -242,13 +242,13 @@ describe("public dashboard", () => {
     expect(html).not.toContain("/admin/runs/");
   });
 
-  it("speaks Spanish with ?lang=es or a Spanish browser", async () => {
+  it("speaks English by default, also to Spanish browsers, and Spanish with ?lang=es", async () => {
     const fake = fakeEnv(scriptedModel());
     const es = await (await admin(fake, "/dashboard?lang=es")).text();
     expect(es).toContain('<html lang="es">');
     expect(es).toContain("Facturado hoy");
     const browser = await (await admin(fake, "/dashboard", { headers: { "Accept-Language": "es-ES,es;q=0.9" } })).text();
-    expect(browser).toContain("Uso a precio de lista");
+    expect(browser).toContain("List-price usage");
     expect(await (await admin(fake, "/dashboard")).text()).toContain("Billed today");
   });
 
