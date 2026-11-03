@@ -1,15 +1,13 @@
 /**
  * i18n.ts — English / Spanish texts of the server-rendered pages (/dashboard,
- * /admin). The language comes from ?lang=en|es, else the browser's
- * Accept-Language. The chat UI (public/app.js) has its own dictionary.
+ * /admin). English by default; ?lang=es switches to Spanish. The chat UI
+ * (public/app.js) has its own dictionary.
  */
 
 export type Lang = "en" | "es";
 
 export function pickLang(req: Request): Lang {
-  const q = new URL(req.url).searchParams.get("lang");
-  if (q === "en" || q === "es") return q;
-  return /^es\b/i.test(req.headers.get("Accept-Language") ?? "") ? "es" : "en";
+  return new URL(req.url).searchParams.get("lang") === "es" ? "es" : "en";
 }
 
 const TEXTS = {
