@@ -48,12 +48,14 @@ const storage = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
 };
-let lang = storage.get("lang") || "en";
+// Only a click on EN / ES is remembered. New key: earlier versions saved the
+// browser's language under "lang" on every visit, which would override English.
+const LANG_KEY = "uiLang";
+let lang = storage.get(LANG_KEY) || "en";
 const t = (key) => I18N[lang][key] ?? I18N.en[key];
 
 function applyLang(next) {
   lang = I18N[next] ? next : "en";
-  storage.set("lang", lang);
   document.documentElement.lang = lang;
   document.title = t("title");
   for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);
@@ -115,6 +117,11 @@ form.addEventListener("submit", (e) => {
   input.value = "";
 });
 for (const b of document.querySelectorAll(".examples button")) b.addEventListener("click", () => ask(b.textContent));
-for (const b of document.querySelectorAll("[data-lang]")) b.addEventListener("click", () => applyLang(b.dataset.lang));
+for (const b of document.querySelectorAll("[data-lang]")) {
+  b.addEventListener("click", () => {
+    applyLang(b.dataset.lang);
+    storage.set(LANG_KEY, lang);
+  });
+}
 
 applyLang(lang);
