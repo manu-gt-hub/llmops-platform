@@ -22,7 +22,7 @@
 import type { Env } from "./env";
 import { TASKS } from "./evals";
 import { CHARTERS } from "./governance";
-import { type Lang, langSwitch, translator } from "./i18n";
+import { type Lang, langSwitch, tipper, translator } from "./i18n";
 import { PASS_SCORE, setLabel } from "./judge";
 import { evaluationRuns, getSwitches, setSwitches, summary } from "./ledger";
 import { FREE_NEURONS_PER_DAY } from "./pricing";
@@ -30,7 +30,7 @@ import { FREE_NEURONS_PER_DAY } from "./pricing";
 const REPO_URL = "https://github.com/manu-gt-hub/llmops-platform";
 
 type Row = Record<string, unknown>;
-type T = ReturnType<typeof translator>;
+type T = ReturnType<typeof translator> & { tip: ReturnType<typeof tipper> };
 
 const all = async (env: Env, sql: string, ...args: unknown[]) =>
   (await env.DB.prepare(sql).bind(...args).all<Row>()).results;
@@ -75,6 +75,7 @@ h1{font-size:1.4rem}h2{font-size:1.1rem;margin-top:2rem}.muted{color:var(--muted
 table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:.35rem .5rem;border-bottom:1px solid var(--line);vertical-align:top}
 .nowrap{white-space:nowrap}th{font-size:.75rem;text-transform:uppercase;color:var(--muted)}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
 button{font:inherit;padding:.15rem .6rem;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer}
+.tip{position:relative;cursor:help;color:var(--muted);font-weight:400;font-size:.85rem;text-transform:none}.tip:hover::after,.tip:focus::after{content:attr(data-tip);position:absolute;left:0;top:1.4em;z-index:10;width:min(280px,80vw);background:var(--fg);color:var(--bg);padding:.5rem .6rem;border-radius:6px;font-size:.8rem;line-height:1.35;white-space:normal}.tip:focus{outline:2px solid #4493f8;border-radius:50%}
 form{display:inline}pre{white-space:pre-wrap;word-break:break-word;margin:0;font-size:.85rem}svg text{fill:var(--muted)}
 </style></head><body><main>${body}</main></body></html>`, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
@@ -107,39 +108,39 @@ async function metrics(env: Env, s: Summary, t: T): Promise<string> {
   return `
 <h2>${t("today")}</h2>
 <div class="grid">
-  <div class="card"><div class="small muted">${t("calls")}</div><div class="stat">${esc(s.today.calls)}</div></div>
-  <div class="card"><div class="small muted">${t("billed")}</div><div class="stat ${billed > 0 ? "warn" : "ok"}">${usd(billed, 2)}</div>
+  <div class="card"><div class="small muted">${t("calls")} ${t.tip("calls")}</div><div class="stat">${esc(s.today.calls)}</div></div>
+  <div class="card"><div class="small muted">${t("billed")} ${t.tip("billed")}</div><div class="stat ${billed > 0 ? "warn" : "ok"}">${usd(billed, 2)}</div>
     <div class="small muted">${billed > 0 ? t("billedOver") : t("billedNote")}</div></div>
-  <div class="card"><div class="small muted">${t("value")}</div><div class="stat">${usd(s.today.value_usd)}</div>
+  <div class="card"><div class="small muted">${t("value")} ${t.tip("value")}</div><div class="stat">${usd(s.today.value_usd)}</div>
     <div class="small muted">${t("valueNote")}</div></div>
-  <div class="card"><div class="small muted">${t("freeUsed")}</div><div class="stat">${pct(s.today.free_neurons_used)}</div>
+  <div class="card"><div class="small muted">${t("freeUsed")} ${t.tip("freeUsed")}</div><div class="stat">${pct(s.today.free_neurons_used)}</div>
     <div class="small muted">${Math.round(Number(s.today.neurons))} ${t("neuronsOf")} ${FREE_NEURONS_PER_DAY} ${t("neurons")}</div></div>
-  <div class="card"><div class="small muted">${t("errorRate")}</div><div class="stat">${pct(s.today.error_rate)}</div></div>
+  <div class="card"><div class="small muted">${t("errorRate")} ${t.tip("errorRate")}</div><div class="stat">${pct(s.today.error_rate)}</div></div>
 </div>
 
 <h2>${t("last7")}</h2>
 <div class="grid">
-  <div class="card"><div class="small muted">${t("runs")}</div><div class="stat">${esc(runs7.runs)}</div></div>
-  <div class="card"><div class="small muted">${t("successRate")}</div><div class="stat">${pct(runs7.success_rate)}</div></div>
-  <div class="card"><div class="small muted">${t("avgCost")}</div><div class="stat">${usd(runs7.avg_cost, 5)}</div></div>
-  <div class="card"><div class="small muted">${t("judge")}</div><div class="stat">${score(judge7.avg)}</div></div>
-  <div class="card"><div class="small muted">${t("agreement")}</div><div class="stat">${pct(judge7.agreement)}</div>
+  <div class="card"><div class="small muted">${t("runs")} ${t.tip("runs")}</div><div class="stat">${esc(runs7.runs)}</div></div>
+  <div class="card"><div class="small muted">${t("successRate")} ${t.tip("successRate")}</div><div class="stat">${pct(runs7.success_rate)}</div></div>
+  <div class="card"><div class="small muted">${t("avgCost")} ${t.tip("avgCost")}</div><div class="stat">${usd(runs7.avg_cost, 5)}</div></div>
+  <div class="card"><div class="small muted">${t("judge")} ${t.tip("judge")}</div><div class="stat">${score(judge7.avg)}</div></div>
+  <div class="card"><div class="small muted">${t("agreement")} ${t.tip("agreement")}</div><div class="stat">${pct(judge7.agreement)}</div>
     <div class="small muted">${esc(judge7.labeled)} ${t("labeled")}</div></div>
 </div>
 
 <div class="grid">
-  <div class="card"><h2>${t("valuePerDay")}</h2>${bars(days.map((d) => ({ label: String(d.day), value: Number(d.cost) })), (v) => usd(v), t)}</div>
-  <div class="card"><h2>${t("callsPerDay")}</h2>${bars(days.map((d) => ({ label: String(d.day), value: Number(d.calls) })), String, t, "#56a64b")}</div>
-  <div class="card"><h2>${t("errorsPerDay")}</h2>${bars(days.map((d) => ({ label: String(d.day), value: Number(d.errors) })), String, t, "#cf222e")}</div>
-  <div class="card"><h2>${t("judgePerDay")}</h2>${bars(judgeDays.map((d) => ({ label: String(d.day), value: Number(d.v) })), (v) => v.toFixed(2), t, "#a352cc")}</div>
+  <div class="card"><h2>${t("valuePerDay")} ${t.tip("valuePerDay")}</h2>${bars(days.map((d) => ({ label: String(d.day), value: Number(d.cost) })), (v) => usd(v), t)}</div>
+  <div class="card"><h2>${t("callsPerDay")} ${t.tip("callsPerDay")}</h2>${bars(days.map((d) => ({ label: String(d.day), value: Number(d.calls) })), String, t, "#56a64b")}</div>
+  <div class="card"><h2>${t("errorsPerDay")} ${t.tip("errorsPerDay")}</h2>${bars(days.map((d) => ({ label: String(d.day), value: Number(d.errors) })), String, t, "#cf222e")}</div>
+  <div class="card"><h2>${t("judgePerDay")} ${t.tip("judgePerDay")}</h2>${bars(judgeDays.map((d) => ({ label: String(d.day), value: Number(d.v) })), (v) => v.toFixed(2), t, "#a352cc")}</div>
 </div>
 
-<h2>${t("guardrails")}</h2>
+<h2>${t("guardrails")} ${t.tip("guardrails")}</h2>
 <div class="wrap"><table><tr><th>${t("rule")}</th><th>${t("action")}</th><th>${t("count")}</th></tr>
 ${rules.map((r) => `<tr><td>${esc(r.rule)}</td><td>${pill(r.action)}</td><td>${esc(r.n)}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">${t("none")}</td></tr>`}
 </table></div>
 
-<h2>${t("releases")}</h2>
+<h2>${t("releases")} ${t.tip("releases")}</h2>
 <div class="wrap"><table><tr><th>${t("deployed")}</th><th>${t("version")}</th><th>${t("commit")}</th></tr>
 ${releases.map((r) => `<tr><td>${esc(r.ts)}</td><td>${esc(r.version)}</td><td><code>${esc(r.commit_sha)}</code></td></tr>`).join("") || `<tr><td colspan="3" class="muted">${t("noReleases")}</td></tr>`}
 </table></div>`;
@@ -154,7 +155,7 @@ function agentsTable(s: Summary, actions: boolean, t: T): string {
       <td>${pct(a.budget_used)} ${t("of")} ${usd(CHARTERS[a.name].daily_budget_usd, 2)}</td>
       ${actions ? `<td>${buttons.join(" ")}</td>` : ""}<td class="small muted">${esc(CHARTERS[a.name].purpose)}</td></tr>`;
   });
-  return `<h2>${t("agents")}</h2><div class="wrap"><table><tr><th>${t("agent")}</th><th>${t("status")}</th>
+  return `<h2>${t("agents")} ${t.tip("agents")}</h2><div class="wrap"><table><tr><th>${t("agent")}</th><th>${t("status")}</th>
     <th>${t("guardrailMode")}</th><th>${t("budgetToday")}</th>${actions ? `<th>${t("actions")}</th>` : ""}<th>${t("purpose")}</th></tr>
     ${rows.join("")}</table></div>`;
 }
@@ -175,10 +176,10 @@ async function evaluationSection(env: Env, t: T): Promise<string> {
     `<tr><td class="small">${esc(r.ts)}</td><td class="nowrap">${esc(r.task_id)}</td><td>${esc(TASKS[String(r.task_id)].question)}</td>
      <td class="nowrap">${r.passed ? `<span class="ok">${t("pass")}</span>` : `<span class="bad">${t("fail")}</span>`}</td>
      <td>${pill(r.status)} <span class="small muted">${esc(r.stop_reason)}</span></td><td>${usd(r.cost_usd, 5)}</td><td>${score(r.score)}</td></tr>`);
-  return `<h2>${t("evalByRelease")} <span class="small muted">${t("evalNote")}</span></h2>
+  return `<h2>${t("evalByRelease")} ${t.tip("evalByRelease")} <span class="small muted">${t("evalNote")}</span></h2>
 <div class="wrap"><table><tr><th>${t("version")}</th><th>${t("evalRuns")}</th><th>${t("passRate")}</th><th>${t("avgPerTask")}</th></tr>
 ${versions.join("") || `<tr><td colspan="4" class="muted">${t("noEval")}</td></tr>`}</table></div>
-<h2>${t("latestEval")}</h2>
+<h2>${t("latestEval")} ${t.tip("latestEval")}</h2>
 <div class="wrap"><table><tr><th>${t("when")}</th><th>${t("task")}</th><th>${t("question")}</th><th>${t("result")}</th>
 <th>${t("status")}</th><th>${t("cost")}</th><th>${t("judge")}</th></tr>
 ${latest.join("") || `<tr><td colspan="7" class="muted">${t("noEval")}</td></tr>`}</table></div>`;
@@ -186,7 +187,7 @@ ${latest.join("") || `<tr><td colspan="7" class="muted">${t("noEval")}</td></tr>
 
 /** Public, read-only: aggregates, agents, evaluation. Nothing a user typed. */
 export async function publicDashboard(env: Env, lang: Lang): Promise<Response> {
-  const t = translator(lang);
+  const t: T = Object.assign(translator(lang), { tip: tipper(lang) });
   const s = await summary(env);
   return page(t("dashboardTitle"), `
 <div class="top"><h1>${t("dashboardTitle")} <span class="small muted">v${esc(s.version)} · ${esc(s.commit)}</span></h1>
@@ -201,7 +202,7 @@ ${await evaluationSection(env, t)}
 }
 
 async function dashboard(env: Env, lang: Lang): Promise<Response> {
-  const t = translator(lang);
+  const t: T = Object.assign(translator(lang), { tip: tipper(lang) });
   const s = await summary(env);
   const recent = await all(env, `SELECT r.run_id, r.ts, r.source, r.status, r.stop_reason, r.steps, r.cost_usd,
     substr(r.question, 1, 90) AS question, j.score FROM runs r LEFT JOIN judgements j USING (run_id) ORDER BY r.ts DESC LIMIT 20`);

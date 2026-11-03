@@ -48,7 +48,7 @@ reasoning behind each choice: [doc/architecture.md](doc/architecture.md) ·
 | | Where |
 |---|---|
 | Chat with the copilot (EN / ES) | `https://<worker>/` |
-| **Public dashboard** (EN / ES): billed and list-price usage today, usage per day, free allocation used, calls and errors, success rate, judge score, guardrail hits, agents and budgets, live evaluation per release, releases. Read-only, nothing users typed | `https://<worker>/dashboard` |
+| **Public dashboard** (EN / ES, every card explained in a tooltip): billed and list-price usage today, usage per day, free allocation used, calls and errors, success rate, judge score, guardrail hits, agents and budgets, live evaluation per release, releases. Read-only, nothing users typed | `https://<worker>/dashboard` |
 | Everything on the dashboard, plus the agent switches (pause, guardrail mode), recent runs with their questions, run details (steps, tool outputs, judge reasoning) and the review queue for human labels | `https://<worker>/admin` (password: `ADMIN_TOKEN`) |
 | Every request: tokens, cost, latency, prompt and response, judge score and human feedback | Cloudflare dashboard → AI → **AI Gateway** → `default` |
 | Worker logs, exceptions, latency | Cloudflare dashboard → Workers → llmops-platform → **Observability** |

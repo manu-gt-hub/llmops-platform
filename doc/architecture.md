@@ -208,6 +208,10 @@ the task file, not from the database.
 - **AI Gateway Evaluations are deprecated**, so scoring is ours; the gateway
   keeps only the score and feedback we attach to each log.
 - **No spend caps in AI Gateway**: budgets are enforced in the Worker.
+- **The free allocation is per account.** The 10,000 neurons a day are shared by
+  every Worker in the Cloudflare account (e.g. `rag_system`), and the platform
+  only sees its own calls: the dashboard and the monitor show *this platform's*
+  share. The account total is in the Cloudflare dashboard → Workers AI.
 - **Workers AI cost is a valuation** (neurons × list price); within the free
   allocation nothing is billed, and there is no invoice to reconcile.
 - **The judge's log annotation is best effort**: the binding exposes only the
