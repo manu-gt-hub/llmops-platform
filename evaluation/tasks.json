@@ -1,43 +1,42 @@
 [
   {
     "id": "task-01",
-    "question": "How much does the Pro plan cost per year for 12 seats with annual billing?",
-    "expected_number": 3549.6
+    "question": "How many free Workers AI neurons does the platform get per day?",
+    "expected_number": 10000
   },
   {
     "id": "task-02",
-    "question": "Within how many minutes must a Sev1 page be acknowledged?",
-    "expected_number": 15
+    "question": "What is the daily budget of the judge agent, in USD?",
+    "expected_number": 0.02
   },
   {
     "id": "task-03",
-    "question": "An Enterprise workspace had 99.5% uptime last month. What service credit percentage does the customer get?",
-    "expected_number": 10
+    "question": "What stop reason does a run get when an operator has paused the agent?",
+    "expected_keywords": ["agent_paused"]
   },
   {
     "id": "task-04",
-    "question": "How much on-call stipend does an engineer earn for 3 weeks of primary rotation?",
-    "expected_number": 450
+    "question": "How many questions per minute per IP does the rate limit allow?",
+    "expected_number": 10
   },
   {
     "id": "task-05",
-    "question": "What is the maximum I can expense for hotel and meals on a trip of 4 nights with 4 travel days?",
-    "expected_number": 800
+    "question": "What minimum pass rate, as a percentage, must the live evaluation reach after a deploy?",
+    "expected_number": 75
   },
   {
     "id": "task-06",
-    "question": "Which plan do I need if my company requires single sign-on?",
-    "expected_keywords": ["enterprise"]
+    "question": "Which Cloudflare database stores the platform's ledger of LLM calls?",
+    "expected_keywords": ["D1"]
   },
   {
     "id": "task-07",
-    "question": "What is the total monthly cost of a company with one workspace of 5 Starter seats and another of 3 Pro seats?",
-    "expected_number": 147
+    "question": "Beyond the free allocation, how much would 5,000 Workers AI neurons cost in USD?",
+    "expected_number": 0.055
   },
   {
     "id": "task-08",
-    "question": "Who has to approve a travel expense of 700 euros?",
-    "expected_keywords": ["manager"],
-    "forbidden_keywords": ["director"]
+    "question": "Which wrangler command returns the Worker to its previous version?",
+    "expected_keywords": ["rollback"]
   }
 ]

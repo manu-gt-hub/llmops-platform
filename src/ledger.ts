@@ -3,7 +3,13 @@
  */
 
 import type { Env } from "./env";
+import { grade, TASKS } from "./evals";
 import { CHARTERS, type Finding, type Switches } from "./governance";
+import { FREE_NEURONS_PER_DAY, neuronsToUsd } from "./pricing";
+
+type Row = Record<string, unknown>;
+const first = async (env: Env, sql: string, ...args: unknown[]): Promise<Row> =>
+  (await env.DB.prepare(sql).bind(...args).first<Row>()) ?? {};
 
 export async function getSwitches(env: Env, agent: string): Promise<Switches> {
   const row = await env.DB.prepare("SELECT status, guardrail_mode FROM agent_switches WHERE agent = ?")
@@ -99,4 +105,47 @@ export async function finishRun(env: Env, r: { runId: string; status: string; st
     .run();
   const row = await env.DB.prepare("SELECT cost_usd FROM runs WHERE run_id = ?").bind(r.runId).first<{ cost_usd: number }>();
   return row?.cost_usd ?? 0;
+}
+
+// ---------------------------------------------------------------------------
+// Read models shared by the dashboards, the monitor and the copilot's tool
+// ---------------------------------------------------------------------------
+/** Numbers the monitor workflow alerts on.
+ *
+ * Two different money figures:
+ *   value_usd   usage at list price (Workers AI neurons × $0.011 / 1,000, plus
+ *               paid providers): what budgets are measured in
+ *   billed_usd  what is actually billed: only neurons beyond the free daily
+ *               allocation, plus paid providers (billed by them) */
+export async function summary(env: Env) {
+  const today = await first(env, `SELECT COUNT(*) AS calls, COALESCE(SUM(cost_usd),0) AS value_usd,
+    COALESCE(SUM(neurons),0) AS neurons, COALESCE(SUM(CASE WHEN provider <> 'workers-ai' THEN cost_usd END),0) AS paid_usd,
+    COALESCE(AVG(1 - ok), 0) AS error_rate FROM llm_calls WHERE ts >= date('now')`);
+  const neurons = Number(today.neurons);
+  const billed = neuronsToUsd(Math.max(0, neurons - FREE_NEURONS_PER_DAY)) + Number(today.paid_usd);
+  const judge = await first(env, "SELECT AVG(score) AS judge_score, COUNT(*) AS judged FROM judgements WHERE ts >= datetime('now', '-1 day')");
+  const agents = await Promise.all(Object.entries(CHARTERS).map(async ([name, c]) => {
+    const spentToday = await first(env, "SELECT COALESCE(SUM(cost_usd),0) AS v FROM llm_calls WHERE agent = ? AND ts >= date('now')", name);
+    return { name, ...(await getSwitches(env, name)), budget_used: Number(spentToday.v) / c.daily_budget_usd };
+  }));
+  return {
+    version: env.APP_VERSION, commit: env.GIT_COMMIT,
+    today: { ...today, billed_usd: billed, free_neurons_used: neurons / FREE_NEURONS_PER_DAY } as Row,
+    judge_24h: judge,
+    agents,
+  };
+}
+
+
+/** Evaluation runs (newest first), graded against evaluation/tasks.json. A run
+ * counts only if it asked the task's current question: when the suite changes,
+ * runs of an older suite are not graded against the new answers. */
+export async function evaluationRuns(env: Env): Promise<(Row & { passed: boolean })[]> {
+  const runs = (await env.DB.prepare(
+    `SELECT r.version, r.task_id, r.question, r.answer, r.status, r.stop_reason, r.cost_usd, r.ts, j.score
+     FROM runs r LEFT JOIN judgements j USING (run_id) WHERE r.source = 'eval' ORDER BY r.ts DESC LIMIT 200`,
+  ).all<Row>()).results;
+  return runs
+    .filter((r) => TASKS[String(r.task_id)]?.question === r.question)
+    .map((r) => ({ ...r, passed: grade(TASKS[String(r.task_id)], (r.answer as string | null) ?? null).passed }));
 }

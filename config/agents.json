@@ -1,19 +1,30 @@
 {
-  "research-agent": {
-    "purpose": "Answer questions from Acme Cloud employees about plans and pricing, the SLA, the on-call policy and travel expenses, using only the Acme Cloud handbook. It must not give legal, medical or financial advice, and must not answer questions unrelated to Acme Cloud.",
+  "platform-copilot": {
+    "purpose": "Answer questions about this LLMOps platform itself — how it works, why it was designed that way, how to operate it and how it is doing right now — using the platform documentation and its live metrics. It must not answer questions unrelated to the platform, and must not reveal secrets or personal data.",
     "owner": "platform-team",
-    "models": ["@cf/meta/llama-3.3-70b-instruct-fp8-fast", "claude-opus-5-5", "gpt-4o-mini"],
-    "tools": ["search_docs", "read_doc", "calculator"],
+    "models": [
+      "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      "claude-opus-5-5",
+      "gpt-4o-mini"
+    ],
+    "tools": [
+      "search_docs",
+      "read_doc",
+      "get_live_metrics",
+      "calculator"
+    ],
     "guardrail_mode": "enforce",
     "judge_sample_rate": 1,
     "max_steps": 6,
-    "max_run_cost_usd": 0.003,
+    "max_run_cost_usd": 0.006,
     "daily_budget_usd": 0.08
   },
   "judge": {
     "purpose": "Grade the runs of other agents against their purpose. Internal agent of the platform; it calls no tools.",
     "owner": "platform-team",
-    "models": ["@cf/meta/llama-3.3-70b-instruct-fp8-fast"],
+    "models": [
+      "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+    ],
     "tools": [],
     "guardrail_mode": "monitor",
     "judge_sample_rate": 0,
