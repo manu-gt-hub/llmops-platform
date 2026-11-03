@@ -10,7 +10,7 @@ import { createRequire } from "node:module";
 
 import type { Env } from "../src/env";
 
-type Script = (input: { messages: { role: string; content: string }[]; tools?: unknown[] }) => unknown;
+type Script = (input: { messages: { role: string; content: string }[]; tools?: unknown[]; response_format?: unknown }) => unknown;
 
 export interface Fake {
   env: Env;
@@ -74,13 +74,14 @@ export function fakeEnv(script: Script, overrides: Partial<Env> = {}): Fake {
 
 const usage = { prompt_tokens: 200, completion_tokens: 30, neurons: 11 };
 
-/** A well-behaved tool-using model: search, calculate, answer. Judge calls
- * (no tools) get a JSON verdict. */
-export function scriptedModel(answer = "According to the handbook, the answer is 147."): Script {
+/** A well-behaved tool-using model: search, calculate, answer (also when it
+ * is not offered tools). Judge calls (JSON mode) get a verdict. */
+export function scriptedModel(answer = "According to the documentation, the answer is 147."): Script {
   return (input) => {
-    if (!input.tools) {
-      return { response: { on_purpose: 5, grounded: 4, helpful: 5, reasoning: "Supported by the handbook." }, usage };
+    if (input.response_format) {
+      return { response: { on_purpose: 5, grounded: 4, helpful: 5, reasoning: "Supported by the documentation." }, usage };
     }
+    if (!input.tools) return { response: answer, tool_calls: [], usage };
     const toolTurns = input.messages.filter((m) => m.role === "tool").length;
     if (toolTurns === 0) return { tool_calls: [{ name: "search_docs", arguments: { query: "starter pro price" } }], usage };
     if (toolTurns === 1) return { tool_calls: [{ name: "calculator", arguments: { expression: "5 * 12 + 3 * 29" } }], usage };
