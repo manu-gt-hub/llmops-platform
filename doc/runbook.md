@@ -7,7 +7,7 @@ which check failed:
 
 | Problem | What to do |
 |---|---|
-| **Error rate > 10 %** | Cloudflare dashboard → Workers → llmops-platform → Observability for the exceptions; AI Gateway → Logs for failing model calls. `quota_exceeded` means the free allocation ran out |
+| **Error rate > 10 %** | Cloudflare dashboard → Workers → llmops-platform → Observability for the exceptions; AI Gateway → Logs for failing model calls. If the message says the failed calls hit the end of the free allocation, nothing is broken: the 10,000 neurons are per Cloudflare account, so other Workers (or local tests with `wrangler dev`) can use them up while this platform shows a low share. Both demos answer `quota_exceeded` until the allocation resets |
 | **Free allocation > 80 %** | Someone is using it a lot. `/admin` → Recent runs. Lower `daily_budget_usd` or the rate limit if it is abuse |
 | **Agent budget > 80 %** | Same as above, for one agent. Raise the budget in `config/agents.json` (reviewed PR) only if the traffic is legitimate |
 | **Judge score < 0.6** | `/admin` → Review queue: open the runs, label them. If humans disagree with the judge, the judge is wrong, not the agent |

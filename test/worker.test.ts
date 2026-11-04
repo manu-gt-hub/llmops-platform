@@ -155,6 +155,10 @@ describe("ask: guardrails, budgets and limits", () => {
       throw new Error("3036: you have used up your daily free allocation");
     });
     expect((await ask(fake, "Which plan has SSO?")).body).toMatchObject({ status: "error", stop_reason: "quota_exceeded" });
+    // The monitor tells these failures apart from bugs
+    const summary = await (await admin(fake, "/admin/api/summary", { headers: { Authorization: basic("s3cret") } })).json() as
+      { today: { calls: number; error_rate: number; quota_errors: number } };
+    expect(summary.today).toMatchObject({ calls: 1, error_rate: 1, quota_errors: 1 });
   });
 
   it("validates input and rate limits per IP", async () => {

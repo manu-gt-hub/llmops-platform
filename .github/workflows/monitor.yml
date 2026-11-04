@@ -32,8 +32,15 @@ jobs:
           node - <<'JS'
           const s = require("./summary.json");
           const problems = [];
-          if (s.today.calls >= 20 && s.today.error_rate > 0.1) problems.push(`error rate ${(s.today.error_rate * 100).toFixed(0)}% today`);
-          if (s.today.free_neurons_used > 0.8) problems.push(`${(s.today.free_neurons_used * 100).toFixed(0)}% of the free Workers AI allocation used`);
+          const pct = (x) => `${(x * 100).toFixed(0)}%`;
+          if (s.today.calls >= 20 && s.today.error_rate > 0.1) {
+            const failed = Math.round(s.today.error_rate * s.today.calls);
+            // Mostly quota errors: the cause is the account's allocation, not this code
+            problems.push(s.today.quota_errors >= failed / 2
+              ? `error rate ${pct(s.today.error_rate)} today: ${s.today.quota_errors} of ${failed} failed calls hit the end of the free Workers AI allocation, which is per Cloudflare account and shared with its other Workers (this platform used ${pct(s.today.free_neurons_used)} of it); no code fix needed, see doc/runbook.md`
+              : `error rate ${pct(s.today.error_rate)} today`);
+          }
+          if (s.today.free_neurons_used > 0.8) problems.push(`${pct(s.today.free_neurons_used)} of the free Workers AI allocation used by this platform`);
           for (const a of s.agents) if (a.budget_used > 0.8) problems.push(`${a.name} used ${(a.budget_used * 100).toFixed(0)}% of its daily budget`);
           if (s.judge_24h.judged >= 5 && s.judge_24h.judge_score < 0.6) problems.push(`judge score ${s.judge_24h.judge_score.toFixed(2)} in 24 h`);
           console.log(JSON.stringify(s, null, 2));
