@@ -116,11 +116,17 @@ export async function finishRun(env: Env, r: { runId: string; status: string; st
  *   value_usd   usage at list price (Workers AI neurons × $0.011 / 1,000, plus
  *               paid providers): what budgets are measured in
  *   billed_usd  what is actually billed: only neurons beyond the free daily
- *               allocation, plus paid providers (billed by them) */
+ *               allocation, plus paid providers (billed by them)
+ *
+ * quota_errors: failed calls refused because the free allocation is used up.
+ * It is per Cloudflare account, so other Workers can use it up while
+ * free_neurons_used (this platform's calls only) stays low. */
 export async function summary(env: Env) {
   const today = await first(env, `SELECT COUNT(*) AS calls, COALESCE(SUM(cost_usd),0) AS value_usd,
     COALESCE(SUM(neurons),0) AS neurons, COALESCE(SUM(CASE WHEN provider <> 'workers-ai' THEN cost_usd END),0) AS paid_usd,
-    COALESCE(AVG(1 - ok), 0) AS error_rate FROM llm_calls WHERE ts >= date('now')`);
+    COALESCE(AVG(1 - ok), 0) AS error_rate,
+    COALESCE(SUM(CASE WHEN ok = 0 AND error LIKE '%free allocation%' THEN 1 ELSE 0 END), 0) AS quota_errors
+    FROM llm_calls WHERE ts >= date('now')`);
   const neurons = Number(today.neurons);
   const billed = neuronsToUsd(Math.max(0, neurons - FREE_NEURONS_PER_DAY)) + Number(today.paid_usd);
   const judge = await first(env, "SELECT AVG(score) AS judge_score, COUNT(*) AS judged FROM judgements WHERE ts >= datetime('now', '-1 day')");
