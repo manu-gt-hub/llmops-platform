@@ -21,7 +21,7 @@
     "wrangler": "^4.157.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^1.4.0",
+    "@anthropic-ai/sdk": "^1.6.0",
     "openai": "^7.47.0"
   }
 }
