@@ -8,7 +8,7 @@ pause the service, and a supply chain of npm packages and GitHub Actions.
 ## Decision
 
 - **Supply chain:** `npm audit --audit-level=high` and gitleaks (full
-  history) fail CI; CodeQL on PRs and weekly; Dependabot weekly.
+  history) fail CI; CodeQL on PRs and weekly.
   (While building this, `npm audit` flagged two critical advisories in
   vitest 3's tinypool; vitest 5 fixed them.)
 - **Credentials:** least-privilege Cloudflare token (Workers Scripts, D1,
