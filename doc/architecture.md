@@ -10,7 +10,7 @@ team has to answer:
 | **Scoring** | Are the answers right, and how do we know? | Deterministic eval suite (run on every release, red = rollback), LLM judge, human labels |
 | **Guardrails** | What may the agent do, and what is refused? | Charter in `config/agents.json`, `src/governance.ts`, `guardrail_events` |
 | **DevOps** | What is deployed, did it work, is it healthy? | CI, deploy workflow, `deployments`, `/version`, monitor workflow, Workers Observability |
-| **DevSecOps** | Is the code, the supply chain and the live service safe? | npm audit, gitleaks, CodeQL, Dependabot, least-privilege token, admin auth, security headers |
+| **DevSecOps** | Is the code, the supply chain and the live service safe? | npm audit, gitleaks, CodeQL, least-privilege token, admin auth, security headers |
 
 Decisions and their trade-offs: [ADRs](adr/README.md) · Operating it: [Runbook](runbook.md)
 
@@ -166,7 +166,6 @@ flowchart LR
 | Vulnerable dependencies fail CI (`npm audit --audit-level=high`) | `ci.yml` |
 | Committed secrets fail CI (gitleaks, full history) | `ci.yml` |
 | Static analysis (CodeQL, weekly and on PRs) | `codeql.yml` |
-| Dependency and action updates (Dependabot) | `.github/dependabot.yml` |
 | Least-privilege deploy token; workflows with `contents: read` | `deploy.yml`, `.env.example` |
 | Secrets only as Worker / GitHub secrets, never in the repo | `wrangler secret put` |
 | Admin behind a password (constant-time check), off when unset; cross-site POSTs refused (CSRF) | `src/security.ts` |

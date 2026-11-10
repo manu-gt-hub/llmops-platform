@@ -82,7 +82,6 @@ Read), `CLOUDFLARE_ACCOUNT_ID` and `ADMIN_TOKEN`. Repository variable
 | [CodeQL](.github/workflows/codeql.yml) | PRs, main, weekly | Static analysis |
 | [Deploy](.github/workflows/deploy.yml) | push to main | D1 setup and migrations → deploy with version and commit → release row → admin secret → smoke test (version live, guardrail live, security headers) → **live evaluation gate** (quality + cost) |
 | [Monitor](.github/workflows/monitor.yml) | every 6 h | Fails, and GitHub emails you, on error rate > 10 %, free allocation or a budget > 80 %, judge score < 0.6 |
-| Dependabot | weekly | Dependency and action updates |
 
 ### Free tier budget
 
